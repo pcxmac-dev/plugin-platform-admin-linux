@@ -34,7 +34,7 @@ class FakeLinux:
 
     def __call__(self, args, timeout):
         self.calls.append(list(args))
-        cmd = args[args.index("--") + 1:] if "--" in args else (args[2:] if args[:2] == ["sudo", "-n"] else args)
+        cmd = args[args.index("--exec") + 1:] if "--exec" in args else (args[2:] if args[:2] == ["sudo", "-n"] else args)
         if cmd[:2] == ["sh", "-c"] and "/run/systemd/system" in cmd[2]:
             return 0, self.init + "\n", ""
         if cmd[:2] == ["sh", "-c"] and "systemctl show" in cmd[2] and "--user" not in cmd[2]:
