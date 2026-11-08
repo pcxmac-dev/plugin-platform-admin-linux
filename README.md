@@ -9,21 +9,26 @@ linux admin plugin for platform".
 ## What it does
 
 A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin API 2.1), through the library's
-`machines.linux.Shell`, on a Linux machine or in a WSL distribution:
+`machines.linux.Shell`, on the native Linux machine the platform runs on and nowhere else:
 
-- The rights: root; sudo without a password (`sudo -n`, never a password asked); WSL's root.
+- The rights: root; sudo without a password (`sudo -n`, never a password asked).
 - The services the framework relies on: docker, containerd, ufw or firewalld, systemd-resolved; under systemd,
   OpenRC or the service command; the setup starts those stopped; an SSH server (ssh, sshd) is shown and never
   started by it.
 - The apps' startups as systemd user units (liminal-charts, liminal-integrator, liminal-login, liminal-platform),
   as the integrator makes its own: read, run, ended, enabled, disabled, made (`register`: the unit written into
-  `~/.config/systemd/user`, enabled, not started) or removed when asked, made only on this machine (the apps do
-  not run in WSL); the setup makes none. A unit runs without a login once `loginctl enable-linger` is set.
+  `~/.config/systemd/user`, enabled, not started) or removed when asked; the setup makes none. A unit runs
+  without a login once `loginctl enable-linger` is set.
 - The framework's processes: their app, command line and memory.
 
-Variables: `ADMIN_LINUX_TARGET`: `local`, `wsl` or `wsl:<distribution>`; unset, Liminal's own WSL distribution on
-Windows (Liminal-Ubuntu first) and this machine on Linux. On a target that is not Liminal's (the user's own
-distribution) the plugin runs no command at all.
+## Native Linux only
+
+The user's words (2026-11-08): "the scope of linux administration is only on native linux O/S"; "it's not for
+administrating WSL instances". The plugin administers the Linux machine the platform runs on and nothing else: on
+Windows, on macOS and inside a WSL distribution (its kernel's release names Microsoft or WSL, or WSL's variables are
+set) it runs no command at all. Its status says why, so the platform shows it disabled, and its setup and every
+command are refused. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
+variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0).
 
 ## From the command line
 
