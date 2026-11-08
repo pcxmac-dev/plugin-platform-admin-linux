@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 (2026-11-08)
+
+On liminal-libs 1.27.0: the native-Linux check is the library's (`machines.linux.why_not_native`,
+`MachinePlugin.not_for_here`), shared with the Linux firewall (the user: "Yes, firewall too"); off a native Linux
+machine its status is the library's (`applies` False, the summary "not for this machine") and the library's setup
+refuses; `why_not_native` stays importable from this module.
+
 ## 0.3.1 (2026-11-08)
 
 Off a native Linux machine its status says `applies` False beside the reason, so the platform shows it as not for

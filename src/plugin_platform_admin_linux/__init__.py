@@ -15,18 +15,16 @@ checks, the status and the setup.
 """
 from __future__ import annotations
 
-import os
-import platform
 import re
 import shlex
-import sys
 from pathlib import Path
 
+from liminal_libs.machines import linux
 from liminal_libs.machines.admin import Admin, AdminError, Startup, SystemService, app_of
 from liminal_libs.machines.linux import Shell
 from liminal_libs.machines.plugin import CommandError
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -34,20 +32,9 @@ RESTART_SECONDS = 10
 
 def why_not_native(system: str | None = None, release: str | None = None, env=None) -> str:
     """Why the machine the platform runs on is not a native Linux one, in words ("" when it is: the only machine this
-    plugin administers). Windows and macOS are not Linux; a WSL distribution is not native (its kernel's release names
-    Microsoft or WSL, or WSL's variables are set), whether the platform runs beside it or inside it. `system`,
-    `release` and `env` stand in for sys.platform, the kernel's release and the environment in tests."""
-    system = sys.platform if system is None else system
-    if not system.startswith("linux"):
-        name = {"win32": "Windows", "cygwin": "Windows", "darwin": "macOS"}.get(system, system)
-        return (f"Linux administration is for a native Linux machine, and this one runs {name}"
-                + ("; Liminal's WSL distributions are the WSL plugins'" if name == "Windows" else ""))
-    env = os.environ if env is None else env
-    release = (platform.release() if release is None else release).lower()
-    if "microsoft" in release or "wsl" in release or env.get("WSL_DISTRO_NAME") or env.get("WSL_INTEROP"):
-        where = f"WSL's {env['WSL_DISTRO_NAME']}" if env.get("WSL_DISTRO_NAME") else "a WSL distribution"
-        return f"Linux administration is for a native Linux machine, and this is {where} on Windows: it administers no WSL instance"
-    return ""
+    plugin administers): the library's check (liminal-libs 1.27.0, shared with the Linux firewall) naming Linux
+    administration. `system`, `release` and `env` stand in for sys.platform, the kernel's release and the environment."""
+    return linux.why_not_native("Linux administration", system, release, env)
 
 
 def blocks(text: str) -> dict[str, dict[str, str]]:
@@ -108,14 +95,15 @@ class LinuxAdminPlugin(Admin):
         self._home = home
         self._native = native  # a test's word for why_not_native(): "" on a native Linux machine, else why not
 
-    def native_note(self) -> str:
-        """Why the machine the platform runs on is not a native Linux one, in words ("" when it is)."""
+    def not_for_here(self) -> str:
+        """Why the machine the platform runs on is not a native Linux one, in words ("" when it is): the library's
+        status and setup honor it (applies False, nothing changed)."""
         return why_not_native() if self._native is None else self._native
 
     @property
     def shell(self) -> Shell:
         """This native Linux machine's commands (sudo -n when the platform is not root); refused anywhere else."""
-        note = self.native_note()
+        note = self.not_for_here()
         if note:
             raise AdminError(note)
         sh = self._shell if self._shell is not None else Shell("local", runner=self._runner)
@@ -125,27 +113,12 @@ class LinuxAdminPlugin(Admin):
 
     def present(self) -> bool:
         """A native Linux machine, the platform's own: never Windows, macOS or a WSL distribution."""
-        if self.native_note():
+        if self.not_for_here():
             return False
         try:
             return self.shell.here
         except CommandError:
             return False
-
-    def status(self) -> dict:
-        note = self.native_note()
-        if note:  # Windows, macOS or a WSL distribution: nothing asked at all, no setup offered (none can help here)
-            return {"present": False, "elevated": False, "elevation": "", "services": [], "startups": [], "processes": [],
-                    "summary": "not a native Linux machine", "valid": False, "why": note, "applies": False}
-        return super().status()
-
-    def setup(self, log=print, steps=None) -> list[dict]:
-        note = self.native_note()
-        if note:  # nothing changed anywhere
-            what = (tuple(steps) if steps else self.STEPS)[0]
-            log(f"{self.name}: {what}: FAILED: {note}")
-            return [{"step": what, "ok": False, "detail": note}]
-        return super().setup(log=log, steps=steps)
 
     def elevated(self) -> bool:
         return self.shell.root()

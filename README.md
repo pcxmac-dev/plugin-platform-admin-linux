@@ -28,7 +28,8 @@ administrating WSL instances". The plugin administers the Linux machine the plat
 Windows, on macOS and inside a WSL distribution (its kernel's release names Microsoft or WSL, or WSL's variables are
 set) it runs no command at all. Its status says why and that it does not apply (`applies` False), so the platform
 shows it disabled with no setup offered; its setup and every command are refused. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
-variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0).
+variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0). The check is the library's (`machines.linux.why_not_native`,
+liminal-libs 1.27.0), shared with the Linux firewall.
 
 ## From the command line
 

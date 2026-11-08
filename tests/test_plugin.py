@@ -143,7 +143,7 @@ def test_only_a_native_linux_machine_is_administered():
         ran: list = []
         p = LinuxAdminPlugin(shell=Shell("local", runner=lambda args, timeout: ran.append(args) or (0, b"", b"")), native=note)
         st = p.status()
-        assert (st["present"], st["valid"], st["summary"], st["why"]) == (False, False, "not a native Linux machine", note)
+        assert (st["present"], st["valid"], st["summary"], st["why"]) == (False, False, "not for this machine", note)
         assert st["applies"] is False  # not for this machine at all: the platform offers no setup
         assert not p.present()
         said: list = []

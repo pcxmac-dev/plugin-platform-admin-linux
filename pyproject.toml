@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plugin-platform-admin-linux"
-version = "0.3.1"  # the plugin's own release (CHANGELOG.md); the app shows it on the Plugins view
+version = "0.4.0"  # the plugin's own release (CHANGELOG.md); the app shows it on the Plugins view
 description = "Linux administration for Liminal: root's rights and how they are had, the services the framework relies on, the apps' systemd user units, the framework's processes."
 readme = "README.md"
 requires-python = ">=3.10"
 # the library it plugs into (the machine kind: liminal_libs.machines, plugin API 2.1)
-dependencies = ["liminal-libs>=1.25.0"]
+dependencies = ["liminal-libs>=1.27.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
