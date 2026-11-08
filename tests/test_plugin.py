@@ -63,7 +63,7 @@ class FakeLinux:
         return 0, "ran\n", ""
 
 
-def plugin(fake, target="wsl:Ubuntu", home=None):
+def plugin(fake, target="wsl:Liminal-Ubuntu", home=None):
     return LinuxAdminPlugin(shell=Shell(target, runner=fake), home=home)
 
 
@@ -78,7 +78,7 @@ def test_the_plugin_reads_services_startups_and_processes_under_systemd():
     assert startups["integrator"]["state"] == "running" and "liminal_integrator service run" in startups["integrator"]["command"]
     assert startups["charts"]["state"] == "absent"
     assert st["processes"] == [{"pid": 4242, "app": "charts", "command": "/usr/bin/python3 -m liminal_charts gui --no-browser --port 8765", "memoryMb": 512}]
-    assert st["elevated"] and st["elevation"] == "root in WSL's Ubuntu through wsl -u root"
+    assert st["elevated"] and st["elevation"] == "root in WSL's Liminal-Ubuntu through wsl -u root"
     assert st["summary"] == "elevated; services: 3 running, stopped: docker, ssh; startups: integrator; 1 Liminal process(es)"
     assert blocks("== a\nX=1\n== b\nY=2\n") == {"a": {"X": "1"}, "b": {"Y": "2"}} and state_of({}) == "absent"
 
@@ -113,5 +113,17 @@ def test_a_user_unit_is_made_here_and_never_in_wsl(tmp_path, monkeypatch):
     assert fake.calls[-1] == ["systemctl", "--user", "start", "liminal-platform.service"]
     assert a.unregister("platform") and not unit.exists() and not a.unregister("platform")
     with pytest.raises(AdminError):
-        plugin(FakeLinux(), target="wsl:Ubuntu", home=tmp_path).register("platform", python=sys.executable)
+        plugin(FakeLinux(), target="wsl:Liminal-Ubuntu", home=tmp_path).register("platform", python=sys.executable)
     assert "ExecStart=" in unit_text("charts", ["/usr/bin/python3", "-m", "liminal_charts", "gui"])
+
+
+def test_a_target_not_liminals_is_never_touched():
+    """WSL's default distribution or the user's own: no command runs there, the status says why, the setup changes
+    nothing (liminal-libs 1.25.0)."""
+    from liminal_libs.machines.linux import Shell
+
+    ran: list = []
+    p = LinuxAdminPlugin(shell=Shell("wsl:Ubuntu", runner=lambda args, timeout: ran.append(args) or (0, b"", b"")))
+    st = p.status()
+    assert (st["present"], st["valid"], st["summary"]) == (False, False, "not on Liminal's") and "WSL's Ubuntu is not Liminal's" in st["why"]
+    assert [d["ok"] for d in p.setup(log=lambda m: None)] == [False] and ran == []

@@ -21,7 +21,9 @@ A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin AP
   not run in WSL); the setup makes none. A unit runs without a login once `loginctl enable-linger` is set.
 - The framework's processes: their app, command line and memory.
 
-Variables: `ADMIN_LINUX_TARGET`: `local`, `wsl` or `wsl:<distribution>`.
+Variables: `ADMIN_LINUX_TARGET`: `local`, `wsl` or `wsl:<distribution>`; unset, Liminal's own WSL distribution on
+Windows (Liminal-Ubuntu first) and this machine on Linux. On a target that is not Liminal's (the user's own
+distribution) the plugin runs no command at all.
 
 ## From the command line
 

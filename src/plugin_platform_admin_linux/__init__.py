@@ -23,7 +23,7 @@ from liminal_libs.machines.admin import Admin, AdminError, Startup, SystemServic
 from liminal_libs.machines.linux import Shell
 from liminal_libs.machines.plugin import CommandError
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 TARGET_VAR = "ADMIN_LINUX_TARGET"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
