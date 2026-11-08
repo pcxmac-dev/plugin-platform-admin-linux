@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 (2026-11-08)
+
+Off a native Linux machine its status says `applies` False beside the reason, so the platform shows it as not for
+this machine and offers no setup (liminal-platform 0.4.2): none can make it valid there.
+
 ## 0.3.0 (2026-11-08)
 
 Native Linux only (the user: "the scope of linux administration is only on native linux O/S"; "it's not for

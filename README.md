@@ -26,8 +26,8 @@ A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin AP
 The user's words (2026-11-08): "the scope of linux administration is only on native linux O/S"; "it's not for
 administrating WSL instances". The plugin administers the Linux machine the platform runs on and nothing else: on
 Windows, on macOS and inside a WSL distribution (its kernel's release names Microsoft or WSL, or WSL's variables are
-set) it runs no command at all. Its status says why, so the platform shows it disabled, and its setup and every
-command are refused. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
+set) it runs no command at all. Its status says why and that it does not apply (`applies` False), so the platform
+shows it disabled with no setup offered; its setup and every command are refused. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
 variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0).
 
 ## From the command line

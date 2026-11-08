@@ -82,6 +82,7 @@ def test_the_plugin_reads_services_startups_and_processes_under_systemd(monkeypa
     assert startups["charts"]["state"] == "absent"
     assert st["processes"] == [{"pid": 4242, "app": "charts", "command": "/usr/bin/python3 -m liminal_charts gui --no-browser --port 8765", "memoryMb": 512}]
     assert st["elevated"] and st["elevation"] == "the platform runs as root" and st["valid"] and st["why"] == ""
+    assert st.get("applies", True)
     assert st["summary"] == "elevated; services: 3 running, stopped: docker, ssh; startups: integrator; 1 Liminal process(es)"
     assert blocks("== a\nX=1\n== b\nY=2\n") == {"a": {"X": "1"}, "b": {"Y": "2"}} and state_of({}) == "absent"
 
@@ -143,6 +144,7 @@ def test_only_a_native_linux_machine_is_administered():
         p = LinuxAdminPlugin(shell=Shell("local", runner=lambda args, timeout: ran.append(args) or (0, b"", b"")), native=note)
         st = p.status()
         assert (st["present"], st["valid"], st["summary"], st["why"]) == (False, False, "not a native Linux machine", note)
+        assert st["applies"] is False  # not for this machine at all: the platform offers no setup
         assert not p.present()
         said: list = []
         assert p.setup(log=said.append) == [{"step": "privileges", "ok": False, "detail": note}]

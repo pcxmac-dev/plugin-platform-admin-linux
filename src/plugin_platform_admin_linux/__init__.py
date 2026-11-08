@@ -26,7 +26,7 @@ from liminal_libs.machines.admin import Admin, AdminError, Startup, SystemServic
 from liminal_libs.machines.linux import Shell
 from liminal_libs.machines.plugin import CommandError
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -134,9 +134,9 @@ class LinuxAdminPlugin(Admin):
 
     def status(self) -> dict:
         note = self.native_note()
-        if note:  # Windows, macOS or a WSL distribution: nothing asked at all
+        if note:  # Windows, macOS or a WSL distribution: nothing asked at all, no setup offered (none can help here)
             return {"present": False, "elevated": False, "elevation": "", "services": [], "startups": [], "processes": [],
-                    "summary": "not a native Linux machine", "valid": False, "why": note}
+                    "summary": "not a native Linux machine", "valid": False, "why": note, "applies": False}
         return super().status()
 
     def setup(self, log=print, steps=None) -> list[dict]:
