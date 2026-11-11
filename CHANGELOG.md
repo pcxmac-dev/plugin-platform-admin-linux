@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 (2026-11-11)
+
+Its page says what it does, and works without root (the user: "the administration plugins don't seem to work right
+especially linux which doesn't say anything about startup"), on liminal-libs 1.48.0:
+- Where it does not act (Windows, macOS, a WSL distribution) its reason goes on to say what it does on a native Linux
+  machine running the platform (a remote, say): the services, the startups at logon (systemd user units) and the
+  platform at boot (liminal-platform-boot.service, a system unit: headless, as the platform's user, never root). Its
+  status also carries two tables, its sections and the unit it would install at boot (an example), with no forms: the
+  platform's page draws them once it shows tables for a plugin not for this machine.
+- Valid whenever it reads this machine: not root no longer disables it. Each change says how it has root (sudo without a
+  password) or that it needs it; under OpenRC the services are read as the platform's user when sudo asks for a password.
+- Its page draws its own tables with confirmed forms: the services (Start…, Stop…, Restart…, as root through sudo -n),
+  the startups at your logon (Register…, Run…, End…, Remove…: your own user units, no root), at boot (0.5.0's section),
+  the framework's processes. The status's lists are frameworkServices, logonStartups, bootServices, frameworkProcesses.
+
 ## 0.5.0 (2026-11-11)
 
 The platform at boot, before anyone signs in (the user: "also windows and linux admin, need sections for starting the

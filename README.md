@@ -23,8 +23,13 @@ A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin AP
 - The platform at boot, before anyone signs in (below).
 - The framework's processes: their app, command line and memory.
 
-The plugin is valid when the platform runs as root, or when sudo runs without a password (`sudo -n`): each change
-that needs root then has it, never asking for a password.
+Its page is its own tables, each change through a form confirmed in the page's dialog: **Services the framework relies
+on** (Start…, Stop…, Restart…), **Startups at your logon** (Register…, Run…, End…, Remove…), **At boot, before anyone
+signs in** (below) and **The framework's processes**.
+
+The plugin is valid whenever it reads this machine, as root or not (0.6.0): the rights are a fact on its page. A change
+that needs root (a service's, a boot service's) has it through `sudo -n`, never asking for a password; where sudo asks
+for one, the change says it needs root. A startup at your logon is your own user unit: no root.
 
 ## At boot, before anyone signs in
 
@@ -75,7 +80,10 @@ The user's words (2026-11-08): "the scope of linux administration is only on nat
 administrating WSL instances". The plugin administers the Linux machine the platform runs on and nothing else: on
 Windows, on macOS and inside a WSL distribution (its kernel's release names Microsoft or WSL, or WSL's variables are
 set) it runs no command at all. Its status says why and that it does not apply (`applies` False), so the platform
-shows it disabled with no setup offered; its setup and every command are refused. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
+shows it disabled with no setup offered; its setup and every command are refused. Its reason goes on to say what it
+does on a native Linux machine running the platform (a remote, say): its services, the startups at logon and the
+platform at boot (0.6.0); its status also carries its sections and the unit it would install at boot as tables, with no
+forms, for a page that shows them. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
 variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0). The check is the library's (`machines.linux.why_not_native`,
 liminal-libs 1.27.0), shared with the Linux firewall.
 

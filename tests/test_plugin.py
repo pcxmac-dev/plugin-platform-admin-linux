@@ -158,6 +158,14 @@ PLATFORM = BootApp("platform", "Liminal Platform", "liminal_platform", 8775, PLA
 LAB = BootApp("lab", "Liminal Lab", "liminal_lab", 8790, "liminal_lab.app.LabApp")
 
 
+def table_of(st, title):
+    return next(t for t in st["tables"] if t["title"] == title)
+
+
+def boot_table(st):
+    return table_of(st, "At boot, before anyone signs in")
+
+
 def plugin(fake, home=None, apps=(), user=("ciara", "/home/ciara"), answering=()):
     """The plugin on a native Linux machine (the test's word), its commands through the stand-in; its boot apps the
     test's (none by default: nothing of the platform imported), its account the test's."""
@@ -170,13 +178,13 @@ def test_the_plugin_reads_services_startups_and_processes_under_systemd(monkeypa
     monkeypatch.setattr(linux_mod.os, "geteuid", lambda: 0, raising=False)  # the platform runs as root
     a = plugin(FakeLinux())
     st = a.status()
-    services = {s["name"]: s for s in st["services"]}
+    services = {s["name"]: s for s in st["frameworkServices"]}
     assert (services["docker"]["state"], services["containerd"]["state"], services["firewalld"]["state"]) == ("stopped", "running", "absent")
     assert services["docker"]["title"] == "Docker Application Container Engine" and not services["ssh"]["mayStart"]
-    startups = {s["app"]: s for s in st["startups"]}
+    startups = {s["app"]: s for s in st["logonStartups"]}
     assert startups["integrator"]["state"] == "running" and "liminal_integrator service run" in startups["integrator"]["command"]
     assert startups["charts"]["state"] == "absent"
-    assert st["processes"] == [{"pid": 4242, "app": "charts", "command": "/usr/bin/python3 -m liminal_charts gui --no-browser --port 8765", "memoryMb": 512}]
+    assert st["frameworkProcesses"] == [{"pid": 4242, "app": "charts", "command": "/usr/bin/python3 -m liminal_charts gui --no-browser --port 8765", "memoryMb": 512}]
     assert st["elevated"] and st["elevation"] == "the platform runs as root" and st["valid"] and st["why"] == ""
     assert st.get("applies", True)
     assert st["summary"] == "elevated; services: 3 running, stopped: docker, ssh; startups: integrator; 1 Liminal process(es)"
@@ -191,12 +199,30 @@ def test_the_setup_starts_docker_never_ssh_and_says_how_root_is_had(monkeypatch)
     assert fake.started == ["systemctl start docker"]  # the SSH server stays as it was
     openrc = FakeLinux(init="openrc")
     st = plugin(openrc).status()
-    assert {s["name"]: s["state"] for s in st["services"]}["docker"] == "stopped"
+    assert {s["name"]: s["state"] for s in st["frameworkServices"]}["docker"] == "stopped"
     plugin(openrc).setup(log=lambda m: None, steps=("services",))
     assert openrc.started == ["rc-service docker start"]
     monkeypatch.setattr(linux_mod.os, "geteuid", lambda: 1000, raising=False)
     assert plugin(FakeLinux()).elevation() == "not root; sudo without a password"
     assert "asks for a password" in plugin(FakeLinux(sudo_ok=False)).elevation()
+    # sudo asking for a password: still valid (it reads), each change saying it needs root
+    st = plugin(FakeLinux(sudo_ok=False)).status()
+    assert st["valid"] and st["why"] == "" and "sudo asks for a password here" in table_of(st, "Services the framework relies on")["note"]
+    logon = table_of(st, "Startups at your logon")
+    assert "no root is needed" in logon["note"] and {r[0]: r for r in logon["rows"]}["integrator"][3]["title"] == "End…"
+    assert [t["title"] for t in st["tables"]] == ["Services the framework relies on", "Startups at your logon",
+                                                  "At boot, before anyone signs in", "The framework's processes"]
+    # under OpenRC the services are read as root when it may, else as the platform's user: still read, still valid
+    openrc = FakeLinux(init="openrc", sudo_ok=False)
+    refuse = openrc.__call__
+
+    def no_sudo(args, timeout):
+        if args[:2] == ["sudo", "-n"]:
+            openrc.calls.append(list(args))
+            return 1, "", "sudo: a password is required\n"
+        return refuse(args, timeout)
+    st = LinuxAdminPlugin(shell=Shell("local", runner=no_sudo), native="", user=("ciara", "/home/ciara"), apps=[]).status()
+    assert st["valid"] and {s["name"]: s["state"] for s in st["frameworkServices"]}["docker"] == "stopped"
 
 
 def test_a_user_unit_is_made_here_and_never_in_wsl(tmp_path, monkeypatch):
@@ -237,10 +263,24 @@ def test_only_a_native_linux_machine_is_administered():
         assert why_not_native() == windows
     for note in (windows, wsl2):
         ran: list = []
-        p = LinuxAdminPlugin(shell=Shell("local", runner=lambda args, timeout: ran.append(args) or (0, b"", b"")), native=note)
+        p = LinuxAdminPlugin(shell=Shell("local", runner=lambda args, timeout: ran.append(args) or (0, b"", b"")), native=note,
+                             apps=[PLATFORM])
         st = p.status()
-        assert (st["present"], st["valid"], st["summary"], st["why"]) == (False, False, "not for this machine", note)
+        assert (st["present"], st["valid"], st["summary"]) == (False, False, "not for this machine")
         assert st["applies"] is False  # not for this machine at all: the platform offers no setup
+        # what it does on a native Linux machine, said here (the user: "linux which doesn't say anything about startup")
+        assert st["why"].startswith(note + ". On a native Linux machine running the platform (a remote, say) it shows and changes")
+        assert "the apps' startups at logon (systemd user units)" in st["why"] and "liminal-platform-boot.service" in st["why"]
+        assert [t["title"] for t in st["tables"]] == ["What it does on a native Linux machine", "The unit it would install at boot"]
+        sections = {r[0]: r for r in st["tables"][0]["rows"]}
+        assert set(sections) == {"Rights", "Services the framework relies on", "Startups at your logon",
+                                 "At boot, before anyone signs in", "The framework's processes"}
+        assert "liminal-platform.service" in sections["Startups at your logon"][1] and "asked twice" in sections["At boot, before anyone signs in"][2]
+        unit = st["tables"][1]
+        assert unit["columns"] == [{"title": "/etc/systemd/system/liminal-platform-boot.service"}]
+        assert ["User=you"] in unit["rows"] and ["WantedBy=multi-user.target"] in unit["rows"]
+        assert ["ExecStart=/home/you/liminal/.venv/bin/python -m liminal_platform serve --no-browser --port 8775"] in unit["rows"]
+        assert st["forms"] == [] and not st["why"].endswith(".")  # nothing to change here; the page adds its own period
         assert not p.present()
         said: list = []
         assert p.setup(log=said.append) == [{"step": "privileges", "ok": False, "detail": note}]
@@ -293,11 +333,11 @@ def test_the_platform_is_registered_at_boot_as_a_system_unit_through_sudo(monkey
     a = plugin(fake, apps=[PLATFORM, LAB])
     st = a.status()
     assert st["valid"] and st["why"] == "" and st["elevation"] == "not root; sudo without a password"
-    rows = st["tables"][0]["rows"]
+    rows = boot_table(st)["rows"]
     assert [(r[1]["text"], r[2]) for r in rows] == [("liminal-platform-boot.service", "not registered"), ("liminal-lab-boot.service", "not registered")]
     assert rows[0][1]["sub"] == f"would run {VENV} -m liminal_platform serve --no-browser --port 8775" and rows[0][3] == "ciara"
     assert rows[0][4] == {"text": "journalctl -u liminal-platform-boot.service", "sub": f"its own: {PLATFORM.log}"}
-    note = st["tables"][0]["note"]
+    note = boot_table(st)["note"]
     assert "system unit" in note and "never root" in note and "As root through sudo without a password" in note
     register = next(f for f in st["forms"] if f["id"] == "boot-register:platform")
     assert register["note"].startswith("A system unit, /etc/systemd/system/liminal-<app>-boot.service") and "lingering" in register["note"]
@@ -310,10 +350,10 @@ def test_the_platform_is_registered_at_boot_as_a_system_unit_through_sudo(monkey
     assert (made.state, made.port, made.account, made.at) == ("stopped", 8775, "ciara", "boot") and made.detail == "at boot: enabled"
     a.startup("platform", "start", "boot")
     assert fake.calls[-1] == ["sudo", "-n", "systemctl", "start", "liminal-platform-boot.service"]
-    assert {b["app"]: b["state"] for b in a.status()["boot"]}["platform"] == "starting"  # nothing answers at its port yet
+    assert {b["app"]: b["state"] for b in a.status()["bootServices"]}["platform"] == "starting"  # nothing answers at its port yet
     up = plugin(fake, apps=[PLATFORM, LAB], answering={8775}).status()
-    assert {b["app"]: b["state"] for b in up["boot"]}["platform"] == "running" and "at boot: platform (running)" in up["summary"]
-    assert up["tables"][0]["rows"][0][5]["form"] == "boot-stop:platform"
+    assert {b["app"]: b["state"] for b in up["bootServices"]}["platform"] == "running" and "at boot: platform (running)" in up["summary"]
+    assert boot_table(up)["rows"][0][5]["form"] == "boot-stop:platform"
     with pytest.raises(BootRefused, match="8775 is platform's"):
         a.register("lab", "boot", 8775)
     a.startup("platform", "stop", "boot")
@@ -332,7 +372,7 @@ def test_under_openrc_the_boot_service_is_an_init_script_in_the_default_runlevel
     fake = BootLinux(init="openrc")
     a = plugin(fake, apps=[PLATFORM], user=("ciara", "/home/ciara"))
     st = a.status()
-    assert "OpenRC service" in st["tables"][0]["note"] and "sudo" not in st["tables"][0]["note"]
+    assert "OpenRC service" in boot_table(st)["note"] and "sudo" not in boot_table(st)["note"]
     a.register("platform", "boot", 8780)
     path = "/etc/init.d/liminal-platform-boot"
     assert fake.modes[path] == "0755" and 'command_args="-m liminal_platform serve --no-browser --port 8780"' in fake.files[path]
@@ -354,10 +394,11 @@ def test_a_boot_service_never_runs_as_root_and_an_unknown_init_makes_none(monkey
     with pytest.raises(BootRefused, match="never root"):
         a.register("platform", "boot", 8775)
     assert fake.files == {} and fake.root_scripts == []
-    assert a.status()["tables"][0]["rows"][0][3] == "–"  # who it would run as: nobody yet
+    assert boot_table(a.status())["rows"][0][3] == "–"  # who it would run as: nobody yet
     plain_init = BootLinux(init="service")
     st = plugin(plain_init, apps=[PLATFORM]).status()
-    assert st["boot"] == [] and st["forms"] == [] and "neither systemd nor OpenRC" in st["tables"][0]["empty"]
+    assert st["bootServices"] == [] and not [f for f in st["forms"] if f["id"].startswith("boot-")]
+    assert "neither systemd nor OpenRC" in boot_table(st)["empty"]
     with pytest.raises(BootRefused, match="neither systemd nor OpenRC"):
         plugin(plain_init, apps=[PLATFORM]).register("platform", "boot", 8775)
     assert plain_init.files == {}
@@ -376,7 +417,7 @@ def test_the_forms_ask_the_startups_hooks_and_a_unit_made_elsewhere_is_said(monk
         params = list(inspect.signature(getattr(a, f["hook"])).parameters)
         assert f["hook"] in a.HOOKS and [x["name"] for x in f["fields"]] == params[:len(f["fields"])]
     assert "SIGINT" in forms["boot-stop:platform"]["confirm"]["words"]
-    gone = next(b for b in st["boot"] if b["app"] == "gone")
+    gone = next(b for b in st["bootServices"] if b["app"] == "gone")
     assert (gone["state"], gone["port"], gone["name"]) == ("disabled", 8799, "liminal-gone-boot.service")
 
 

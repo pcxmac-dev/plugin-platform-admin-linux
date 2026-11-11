@@ -30,6 +30,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import time
 from pathlib import Path
 
 from liminal_libs import web
@@ -38,7 +39,7 @@ from liminal_libs.machines.admin import Admin, AdminError, BootApp, BootRefused,
 from liminal_libs.machines.linux import Shell
 from liminal_libs.machines.plugin import CommandError
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -51,6 +52,7 @@ USER_NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")  # an account a unit's User= o
 WORD = re.compile(r"[A-Za-z0-9_./+@:,=-]+")  # a word a unit or an init script carries as it is
 SPACED = re.compile(r"[A-Za-z0-9_./+@:,=%$ -]+")  # a word a unit carries once quoted (% and $ doubled)
 BACKOFF = (6, 600)  # systemd 254 and later: RestartSteps, RestartMaxDelaySec (older ones say the keys are unknown and go on)
+SUDO_S = 10.0  # whether sudo runs without a password is asked again after this long
 END = "LIMINAL_FILE"  # the here-document's end when a file is written as root
 
 
@@ -219,6 +221,7 @@ class LinuxAdminPlugin(Admin):
         self._logs = logs  # a test's logs folder; None: the platform's
         self._python = python  # a test's Python; None: this one
         self._listening = listening or web.listening  # whether something answers at a port (a test's stand-in)
+        self._sudo: tuple[float, bool] | None = None  # whether sudo ran without a password, when last asked
 
     def not_for_here(self) -> str:
         """Why the machine the platform runs on is not a native Linux one, in words ("" when it is): the library's
@@ -249,15 +252,57 @@ class LinuxAdminPlugin(Admin):
         return self.shell.root()
 
     def may_elevate(self) -> bool:
-        """Root's rights are had when a change needs them: the platform is root, or sudo runs without a password."""
+        """Root's rights are had when a change needs them: the platform is root, or sudo runs without a password (asked
+        again after SUDO_S)."""
         sh = self.shell
         if sh.root():
             return True
+        now = time.monotonic()
+        if self._sudo is not None and now - self._sudo[0] < SUDO_S:
+            return self._sudo[1]
         try:
             sh.run("true")  # sudo -n true
-            return True
+            ok = True
         except CommandError:
-            return False
+            ok = False
+        self._sudo = (now, ok)
+        return ok
+
+    def rights_words(self, kind: str) -> str:
+        if kind == "logon":
+            return "As you (your own user units): no root is needed"
+        if self.shell.root():
+            return ""
+        if self.may_elevate():
+            return "As root through sudo without a password (never asked for one)"
+        return "It needs root, and sudo asks for a password here: run the platform as root, or let sudo run it without one"
+
+    def elsewhere(self) -> tuple[str, list[dict]]:
+        """What it does on a native Linux machine running the platform (a remote, say), said where it does not act: its
+        sections, and the unit it would install at boot (an example: that machine's own Python and user in it)."""
+        app = next(iter(self.boot_apps()), None) or BootApp("platform", "Liminal Platform", "liminal_platform", 8775)
+        unit = boot_unit(app.name)
+        words = ("On a native Linux machine running the platform (a remote, say) it shows and changes the services the "
+                 "framework relies on, the apps' startups at logon (systemd user units) and the platform at boot, before anyone "
+                 f"signs in ({unit}, a system unit: headless, as the platform's user, never root)")
+        sections = {"title": "What it does on a native Linux machine",
+                    "note": "Only on the native Linux machine the platform runs on: never on Windows, macOS or in a WSL distribution.",
+                    "columns": [{"title": "Section"}, {"title": "What it shows"}, {"title": "What it changes"}],
+                    "rows": [["Rights", "root, or sudo without a password", "each change asks for root through sudo -n, never a password"],
+                             ["Services the framework relies on", ", ".join(s[0] for s in self.SERVICES if s[3]) + "; an SSH server shown only",
+                              "start, stop, restart, each confirmed; the setup starts those stopped, never an SSH server"],
+                             ["Startups at your logon", "a systemd user unit per app in ~/.config/systemd/user: "
+                              + ", ".join(f"{u}.service" for u in UNITS.values()), "register, run, end, remove, each confirmed"],
+                             ["At boot, before anyone signs in", f"a system unit per app, {SYSTEMD_DIR}/{unit} (under OpenRC "
+                              f"{OPENRC_DIR}/{boot_service(app.name)}): headless, as the platform's user, never root, started again "
+                              "after a failure", "register (its port), start, stop, remove (asked twice), each confirmed"],
+                             ["The framework's processes", "its apps running, their memory", "nothing"]]}
+        example = boot_unit_text(app, ["/home/you/liminal/.venv/bin/python", "-m", app.module, "serve", "--no-browser",
+                                       "--port", str(app.port or 8775)], "you")
+        installed = {"title": "The unit it would install at boot", "columns": [{"title": f"{SYSTEMD_DIR}/{unit}"}],
+                     "note": "An example: that machine's own Python and the platform's user there take the place of these.",
+                     "rows": [[line] for line in example.splitlines() if line]}
+        return words, [sections, installed]
 
     def elevation(self) -> str:
         sh = self.shell
@@ -285,7 +330,13 @@ class LinuxAdminPlugin(Admin):
                                   found.get(n, {}).get("UnitFileState", ""), used, may) for n, title, used, may in self.SERVICES]
         probe = "rc-service" if init == "openrc" else "service"
         script = "; ".join(f"{probe} {n} status >/dev/null 2>&1; echo '{n} '$?" for n in names)
-        codes = dict(line.split() for line in self.shell.sh(script).splitlines() if len(line.split()) == 2)
+        try:
+            out = self.shell.sh(script)
+        except CommandError as e:  # root refused (sudo asks for a password): read as the platform's user, who may ask a status
+            if not e.denied:
+                raise
+            out = self.shell.sh(script, root=False)
+        codes = dict(line.split() for line in out.splitlines() if len(line.split()) == 2)
         out = []
         for n, title, used, may in self.SERVICES:
             code = codes.get(n, "")
@@ -397,9 +448,6 @@ class LinuxAdminPlugin(Admin):
                 "(Restart=on-failure; systemd 254 and later wait up to 10 min while it keeps failing), stopped by SIGINT, its "
                 "output in systemd's journal. A system unit rather than a user unit with lingering: lingering would start "
                 "every user unit of yours at boot, the startups at your logon too, and keep them running after you sign out")
-
-    def boot_rights(self) -> str:
-        return "" if self.shell.root() else "As root through sudo without a password (never asked for one)"
 
     def boot_stopping(self) -> str:
         return "its supervisor sends it SIGINT, as Ctrl+C: it closes what it holds"
