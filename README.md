@@ -8,7 +8,7 @@ linux admin plugin for platform".
 
 ## What it does
 
-A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin API 2.1), through the library's
+A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin API 2.2), through the library's
 `machines.linux.Shell`, on the native Linux machine the platform runs on and nowhere else:
 
 - The rights: root; sudo without a password (`sudo -n`, never a password asked).
@@ -104,3 +104,31 @@ python -m plugin_platform_admin_linux processes
 ```
 
 The platform app drives the same hooks from its page.
+
+## Its API
+
+The user's words (2026-11-11): "each plugin should reflect the the API its attached to, and present links that provide
+documentation, the plugin interface should more or less contain what it already has, BUT, it should also expose more of
+what the API is about". Since 0.7.0 (plugin API 2.2) the plugin declares what it attaches to (`apis.py`), and the
+platform's page draws each card: what the API is, its links, every part of it (those the plugin uses first, the rest
+under "more of the API") and every call it makes, with the API's other notable calls beside them.
+
+- **systemd (systemctl)**: [systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html),
+  [systemd.unit(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html),
+  [systemd.service(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)
+  (RestartSteps= and RestartMaxDelaySec= since systemd 254), [systemd's news](https://github.com/systemd/systemd/blob/main/NEWS):
+  the services, the user units at your logon, the system unit at boot.
+- **OpenRC**: [its user guide](https://github.com/OpenRC/openrc/blob/master/user-guide.md),
+  [rc-service(8)](https://github.com/OpenRC/openrc/blob/master/man/rc-service.8),
+  [rc-update(8)](https://github.com/OpenRC/openrc/blob/master/man/rc-update.8),
+  [supervise-daemon](https://github.com/OpenRC/openrc/blob/master/supervise-daemon-guide.md): the services, and the init
+  script at boot.
+- **SysV service**: [service(8)](https://manpages.ubuntu.com/manpages/resolute/man8/service.8.html), where the init is
+  neither.
+- **sudo**: [sudo(8)](https://www.sudo.ws/docs/man/sudo.man/), [sudoers(5)](https://www.sudo.ws/docs/man/sudoers.man/):
+  root's rights through `sudo -n`, never a password asked.
+- **ps (procps-ng)**: [ps(1)](https://man7.org/linux/man-pages/man1/ps.1.html): the framework's processes.
+
+`api_facts()` says what the plugin kept of them while it ran, asking nothing: whether sudo ran without a password, when
+last asked. Every address on the cards was read on 2026-11-11; the test `test_the_cards_pages_answer` asks each of them
+again when `LIMINAL_VENDOR_PAGES=1` is set (it is skipped otherwise).

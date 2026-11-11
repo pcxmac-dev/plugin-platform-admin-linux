@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0 (2026-11-11)
+
+Its API on its page, plugin API 2.2 (the user: "each plugin should reflect the the API its attached to, and present
+links that provide documentation, the plugin interface should more or less contain what it already has, BUT, it should
+also expose more of what the API is about"). Five cards (`apis.py`), each with the makers' pages, every part of the API
+said covered or not, and every call the plugin makes beside the API's other notable ones:
+- systemd (systemctl): systemctl(1), systemd.unit(5), systemd.service(5), systemd.exec(5), the targets, its news and
+  source; the services read and changed, the user units at your logon, the system unit at boot and the files written.
+- OpenRC: its user, service script and supervise-daemon guides, rc-service(8), rc-update(8), openrc-run(8).
+- SysV service: service(8), update-rc.d(8), init(8).
+- sudo: sudo(8), sudoers(5): `sudo -n`, never a password.
+- ps (procps-ng): ps(1), proc(5).
+
+`api_facts()` says what the plugin kept while it ran, asking nothing: whether sudo ran without a password, when last
+asked. Tests: the cards name every command the plugin runs and every file it writes, over every read and change on
+stand-in machines under systemd, OpenRC and SysV scripts; a link check runs with LIMINAL_VENDOR_PAGES=1. Needs
+liminal-libs>=1.49.0.
+
 ## 0.6.0 (2026-11-11)
 
 Its page says what it does, and works without root (the user: "the administration plugins don't seem to work right

@@ -20,6 +20,11 @@ too, and keep them running after the user signs out; OpenRC has no user units at
 only on this native Linux machine, as root through `sudo -n` (never asking for a password), each change confirmed on
 the page, a removal twice.
 
+What it attaches to (0.7.0, plugin API 2.2; the user, 2026-11-11: "each plugin should reflect the the API its attached
+to, and present links that provide documentation"): systemd's systemctl and its unit files, OpenRC, the SysV service
+command, sudo and procps' ps, each with its makers' pages, its parts and its calls (apis.py), drawn on the plugin's
+page; `api_facts` says what it kept of them while it ran (whether sudo ran without a password, when last asked).
+
     python -m plugin_platform_admin_linux status | setup [STEP ...] | services | startups | boot | processes
                                           | service NAME start|stop|restart | startup APP run|end|enable|disable
                                           | startup APP start|stop --boot | register APP [--boot [--port N]]
@@ -39,7 +44,9 @@ from liminal_libs.machines.admin import Admin, AdminError, BootApp, BootRefused,
 from liminal_libs.machines.linux import Shell
 from liminal_libs.machines.plugin import CommandError
 
-__version__ = "0.6.0"
+from .apis import APIS, facts
+
+__version__ = "0.7.0"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -198,7 +205,8 @@ class LinuxAdminPlugin(Admin):
     title = "Linux administration"
     about = ("The native Linux machine the platform runs on, never a WSL distribution: root's rights and how they are had, "
              "the services the framework relies on, the apps' systemd user units, the platform's at boot, the framework's processes")
-    api = "2.1"
+    api = "2.2"
+    apis = APIS  # what it attaches to: systemctl, OpenRC, service, sudo, ps (apis.py)
     order = 721
     BOOT_SERVICES = True
     SERVICES = (("docker", "Docker Engine", "the containers", True),
@@ -222,6 +230,10 @@ class LinuxAdminPlugin(Admin):
         self._python = python  # a test's Python; None: this one
         self._listening = listening or web.listening  # whether something answers at a port (a test's stand-in)
         self._sudo: tuple[float, bool] | None = None  # whether sudo ran without a password, when last asked
+
+    def api_facts(self) -> dict:
+        """What it kept of its APIs while it ran, asking nothing: whether sudo ran without a password, when last asked."""
+        return facts(self)
 
     def not_for_here(self) -> str:
         """Why the machine the platform runs on is not a native Linux one, in words ("" when it is): the library's
