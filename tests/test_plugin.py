@@ -259,12 +259,12 @@ def test_only_the_linux_the_platform_runs_on_is_administered():
     """On Windows or macOS no command runs at all, the status says why (the platform shows the plugin disabled), the
     setup and every command are refused: a platform there does not reach into a WSL distribution from outside (the
     user, 2026-11-08: "it's not for administrating WSL instances"). On Linux it works, inside a WSL distribution too
-    (0.8.0, liminal-libs 1.56.0; the user, 2026-11-15: "wsl and firewall linux should always work under linux")."""
+    (0.8.0, liminal-libs 1.57.0; the user, 2026-11-15: "wsl and firewall linux should always work under linux")."""
     windows, macos = why_not_native("win32", "10", {}), why_not_native("darwin", "24.1.0", {})
     assert windows.startswith("Linux administration is for ") and "and this one runs Windows" in windows
     assert windows.endswith("Liminal's WSL distributions are the WSL plugins'") and "this one runs macOS" in macos
     assert why_not_native("linux", "6.8.0-48-generic", {}) == ""  # a Linux machine of its own
-    if hasattr(linux_mod, "wsl_table"):  # liminal-libs 1.56.0: a WSL kernel is Linux like any other
+    if hasattr(linux_mod, "wsl_table"):  # liminal-libs 1.57.0: a WSL kernel is Linux like any other
         assert why_not_native("linux", "6.6.87.2-microsoft-standard-WSL2", {"WSL_DISTRO_NAME": "Ubuntu"}) == ""
         assert why_not_native("linux", "4.4.0-19041-Microsoft", {}) == ""  # WSL 1
         assert why_not_native("linux", "6.8.0-48-generic", {"WSL_INTEROP": "/run/WSL/1_interop"}) == ""
@@ -311,7 +311,7 @@ def test_inside_a_wsl_distribution_it_works_and_says_what_wsl_changes(monkeypatc
     from liminal_libs.machines.admin import Admin
 
     if not hasattr(Admin, "machine_tables"):
-        pytest.skip("liminal-libs before 1.56.0: its Admin base draws no table of the plugin's own")
+        pytest.skip("liminal-libs before 1.57.0: its Admin base draws no table of the plugin's own")
     monkeypatch.setattr(linux_mod.os, "geteuid", lambda: 0, raising=False)
     under = {"title": "Under WSL", "columns": [], "rows": [["This Linux", "WSL 2: Ubuntu", ""]]}
     monkeypatch.setattr(linux_mod, "wsl_table", lambda kind: under if kind == "admin" else None, raising=False)

@@ -68,7 +68,7 @@ END = "LIMINAL_FILE"  # the here-document's end when a file is written as root
 
 def why_not_native(system: str | None = None, release: str | None = None, env=None) -> str:
     """Why the machine the platform runs on is not one this plugin administers, in words ("" on Linux, a WSL
-    distribution included since liminal-libs 1.56.0): the library's check (shared with the Linux firewall) naming Linux
+    distribution included since liminal-libs 1.57.0): the library's check (shared with the Linux firewall) naming Linux
     administration. `system`, `release` and `env` stand in for sys.platform, the kernel's release and the environment."""
     return linux.why_not_native("Linux administration", system, release, env)
 
@@ -296,7 +296,7 @@ class LinuxAdminPlugin(Admin):
 
     def machine_tables(self) -> list[dict]:
         """Inside a WSL distribution: what WSL changes for this plugin (the library's linux.wsl_table, liminal-libs
-        1.56.0), after its own tables. Nothing on a machine of its own, nor with an older library."""
+        1.57.0), after its own tables. Nothing on a machine of its own, nor with an older library."""
         table = getattr(linux, "wsl_table", None)
         under = table("admin") if table is not None else None
         return [under] if under else []

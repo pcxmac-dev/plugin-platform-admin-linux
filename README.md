@@ -80,7 +80,7 @@ OpenRC has no user units at all, so one shape serves both inits.
 The plugin administers the Linux the platform itself runs on and nothing else. That is a machine of its own, or a WSL
 distribution the platform runs inside (0.8.0; the user, 2026-11-15: "wsl and firewall linux should always work under
 linux, if wsl prevents or misses some capability this should reflect in the plugin"). Inside WSL its page carries an
-"Under WSL" table (the library's `machines.linux.wsl_table`, liminal-libs 1.56.0) saying what WSL changes: whether
+"Under WSL" table (the library's `machines.linux.wsl_table`, liminal-libs 1.57.0) saying what WSL changes: whether
 systemd is the init there (a distribution without it has no units to make or start), that the distribution runs only
 while Windows keeps it started, and that a service enabled at boot starts when the distribution starts, not when the
 PC does. Rights are as on any Linux: root, or sudo without a password; where sudo asks for one, the page says so and

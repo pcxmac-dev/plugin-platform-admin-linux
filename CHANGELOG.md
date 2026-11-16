@@ -6,7 +6,7 @@ It works on any Linux the platform runs on, a WSL distribution included (the use
 always work under linux, if wsl prevents or misses some capability this should reflect in the plugin"). Until now it
 refused whenever the kernel was WSL's, which read the user's words of 2026-11-08 ("it's not for administrating WSL
 instances") too widely: those ruled out a platform on Windows reaching into a WSL distribution, and that stays so. A
-platform running inside a distribution administers that Linux as any other. With liminal-libs 1.56.0 (the library's
+platform running inside a distribution administers that Linux as any other. With liminal-libs 1.57.0 (the library's
 check no longer refuses a WSL kernel): its services, the startups at logon and the boot service are read and changed
 there, and its page carries an "Under WSL" table saying what WSL changes: whether systemd is the init, that the
 distribution runs only while Windows keeps it started, and that "at boot" there means when the distribution starts.
