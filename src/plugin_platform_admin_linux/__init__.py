@@ -46,7 +46,7 @@ from liminal_libs.machines.plugin import CommandError
 
 from .apis import APIS, facts
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -208,6 +208,7 @@ class LinuxAdminPlugin(Admin):
     api = "2.2"
     apis = APIS  # what it attaches to: systemctl, OpenRC, service, sudo, ps (apis.py)
     order = 721
+    SECTION = "os"  # drawn under the platform's OS plugins (liminal-platform 0.26.0)
     BOOT_SERVICES = True
     SERVICES = (("docker", "Docker Engine", "the containers", True),
                 ("containerd", "containerd", "Docker's runtime", True),

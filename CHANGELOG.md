@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 (2026-11-15)
+
+Drawn under the platform's OS plugins section, in the list on the left (the user: "then OS plugins" (the WSL distributions, the admin and the firewall plugins, as chosen)): `SECTION = "os"`, liminal-libs 1.51.0's machine-plugin attribute. liminal-platform 0.26.0 draws it; an older platform keeps the plugin under Machine plugins. Nothing else changes.
+
 ## 0.7.0 (2026-11-11)
 
 Its API on its page, plugin API 2.2 (the user: "each plugin should reflect the the API its attached to, and present
