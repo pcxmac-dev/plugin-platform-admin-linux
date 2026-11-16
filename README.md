@@ -9,7 +9,8 @@ linux admin plugin for platform".
 ## What it does
 
 A machine plugin of the platform (`liminal_libs.machines.admin.Admin`, plugin API 2.2), through the library's
-`machines.linux.Shell`, on the native Linux machine the platform runs on and nowhere else:
+`machines.linux.Shell`, on the Linux the platform itself runs on (a machine of its own, or a WSL distribution it runs
+inside) and nowhere else:
 
 - The rights: root; sudo without a password (`sudo -n`, never a password asked).
 - The services the framework relies on: docker, containerd, ufw or firewalld, systemd-resolved; under systemd,
@@ -62,7 +63,7 @@ boot, and with it every enabled user unit, the startups at your logon (Startups,
 after you sign out, so "at your logon" would quietly become "always". A system unit starts only the app asked for, and
 OpenRC has no user units at all, so one shape serves both inits.
 
-- **Written only here**, on this native Linux machine (never a WSL distribution), as root through `sudo -n`: one root
+- **Written only here**, on this Linux, as root through `sudo -n`: one root
   script writes the file beside its place and moves it in, owned by root (0644 for a unit, 0755 for an init script),
   then enables it; never a password asked.
 - **Never root.** It runs as the platform's own user; a platform run as root through sudo gives it the user sudo was
@@ -74,18 +75,25 @@ OpenRC has no user units at all, so one shape serves both inits.
 - **One port each.** A boot service and the platform at your logon cannot share a port; the port field says what wants
   which port, and a confirmation says so when it is the same.
 
-## Native Linux only
+## On Linux, the platform's own
 
-The user's words (2026-11-08): "the scope of linux administration is only on native linux O/S"; "it's not for
-administrating WSL instances". The plugin administers the Linux machine the platform runs on and nothing else: on
-Windows, on macOS and inside a WSL distribution (its kernel's release names Microsoft or WSL, or WSL's variables are
-set) it runs no command at all. Its status says why and that it does not apply (`applies` False), so the platform
-shows it disabled with no setup offered; its setup and every command are refused. Its reason goes on to say what it
-does on a native Linux machine running the platform (a remote, say): its services, the startups at logon and the
-platform at boot (0.6.0); its status also carries its sections and the unit it would install at boot as tables, with no
-forms, for a page that shows them. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
-variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0). The check is the library's (`machines.linux.why_not_native`,
-liminal-libs 1.27.0), shared with the Linux firewall.
+The plugin administers the Linux the platform itself runs on and nothing else. That is a machine of its own, or a WSL
+distribution the platform runs inside (0.8.0; the user, 2026-11-15: "wsl and firewall linux should always work under
+linux, if wsl prevents or misses some capability this should reflect in the plugin"). Inside WSL its page carries an
+"Under WSL" table (the library's `machines.linux.wsl_table`, liminal-libs 1.56.0) saying what WSL changes: whether
+systemd is the init there (a distribution without it has no units to make or start), that the distribution runs only
+while Windows keeps it started, and that a service enabled at boot starts when the distribution starts, not when the
+PC does. Rights are as on any Linux: root, or sudo without a password; where sudo asks for one, the page says so and
+changes are refused.
+
+On Windows and on macOS it runs no command at all: a platform there does not reach into a WSL distribution from
+outside (the user, 2026-11-08: "it's not for administrating WSL instances"). Its status says why and that it does not
+apply (`applies` False), so the platform shows it disabled with no setup offered; its setup and every command are
+refused. Its reason goes on to say what it does on Linux (its services, the startups at logon and the platform at
+boot, 0.6.0); its status also carries its sections and the unit it would install at boot as tables, with no forms, for
+a page that shows them. Liminal's WSL distributions are the WSL plugins' to install, update and log in to. It has no
+variables (`ADMIN_LINUX_TARGET` is gone since 0.3.0). The check is the library's (`machines.linux.why_not_native`),
+shared with the Linux firewall. Until 0.8.0 a WSL kernel was refused too, the platform's own included.
 
 ## From the command line
 

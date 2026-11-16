@@ -1,7 +1,10 @@
 """Linux administration for Liminal (the user, 2026-11-07: "a windows and linux admin plugin for platform") on the
-native Linux machine the platform runs on, and nowhere else (the user, 2026-11-08: "the scope of linux administration
-is only on native linux O/S"; "it's not for administrating WSL instances"): on Windows, on macOS and inside a WSL
-distribution it runs no command at all (Liminal's WSL distributions are the WSL plugins'). Through the library's
+Linux the platform itself runs on, and nowhere else: a machine of its own, or a WSL distribution the platform runs
+inside (0.8.0; the user, 2026-11-15: "wsl and firewall linux should always work under linux, if wsl prevents or
+misses some capability this should reflect in the plugin": its page then carries an "Under WSL" table). On Windows
+and on macOS it runs no command at all: a platform there does not reach into a WSL distribution from outside (the
+user, 2026-11-08: "it's not for administrating WSL instances"; Liminal's WSL distributions are the WSL plugins').
+Until 0.8.0 a WSL kernel was refused too, the platform's own included. Through the library's
 machines.linux.Shell on this machine: whether the platform has root's rights and how they are had (root; sudo
 without a password); the services the framework relies on (Docker and containerd, the firewall, DNS), started when
 stopped, under systemd or OpenRC or the service command, and the SSH server shown but never started on its own; the
@@ -17,7 +20,7 @@ Restart=on-failure, SIGINT to stop), under OpenRC an init script /etc/init.d/lim
 runlevel (supervise-daemon, command_user, respawned). A system unit rather than a user unit with `loginctl
 enable-linger`: lingering would start every enabled user unit of the user's at boot, the startups at logon above
 too, and keep them running after the user signs out; OpenRC has no user units at all, so one shape serves both. Written
-only on this native Linux machine, as root through `sudo -n` (never asking for a password), each change confirmed on
+only on this Linux, as root through `sudo -n` (never asking for a password), each change confirmed on
 the page, a removal twice.
 
 What it attaches to (0.7.0, plugin API 2.2; the user, 2026-11-11: "each plugin should reflect the the API its attached
@@ -46,7 +49,7 @@ from liminal_libs.machines.plugin import CommandError
 
 from .apis import APIS, facts
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -64,8 +67,8 @@ END = "LIMINAL_FILE"  # the here-document's end when a file is written as root
 
 
 def why_not_native(system: str | None = None, release: str | None = None, env=None) -> str:
-    """Why the machine the platform runs on is not a native Linux one, in words ("" when it is: the only machine this
-    plugin administers): the library's check (liminal-libs 1.27.0, shared with the Linux firewall) naming Linux
+    """Why the machine the platform runs on is not one this plugin administers, in words ("" on Linux, a WSL
+    distribution included since liminal-libs 1.56.0): the library's check (shared with the Linux firewall) naming Linux
     administration. `system`, `release` and `env` stand in for sys.platform, the kernel's release and the environment."""
     return linux.why_not_native("Linux administration", system, release, env)
 
@@ -203,7 +206,7 @@ def unquoted(value: str) -> str:
 class LinuxAdminPlugin(Admin):
     name = "admin-linux"
     title = "Linux administration"
-    about = ("The native Linux machine the platform runs on, never a WSL distribution: root's rights and how they are had, "
+    about = ("The Linux the platform runs on, a WSL distribution it runs inside included: root's rights and how they are had, "
              "the services the framework relies on, the apps' systemd user units, the platform's at boot, the framework's processes")
     api = "2.2"
     apis = APIS  # what it attaches to: systemctl, OpenRC, service, sudo, ps (apis.py)
@@ -224,7 +227,7 @@ class LinuxAdminPlugin(Admin):
         self._shell = shell
         self._runner = runner
         self._home = home
-        self._native = native  # a test's word for why_not_native(): "" on a native Linux machine, else why not
+        self._native = native  # a test's word for why_not_native(): "" on Linux, else why not
         self._user = user  # a test's (name, home) a boot service runs as; None: the platform's own
         self._apps = apps  # a test's boot apps; None: the library's (the platform, the apps inheriting it)
         self._logs = logs  # a test's logs folder; None: the platform's
@@ -237,23 +240,24 @@ class LinuxAdminPlugin(Admin):
         return facts(self)
 
     def not_for_here(self) -> str:
-        """Why the machine the platform runs on is not a native Linux one, in words ("" when it is): the library's
+        """Why the machine the platform runs on is not Linux, in words ("" when it is): the library's
         status and setup honor it (applies False, nothing changed)."""
         return why_not_native() if self._native is None else self._native
 
     @property
     def shell(self) -> Shell:
-        """This native Linux machine's commands (sudo -n when the platform is not root); refused anywhere else."""
+        """This Linux's commands (sudo -n when the platform is not root); refused anywhere else, and for a Linux
+        reached from outside (a WSL distribution from Windows)."""
         note = self.not_for_here()
         if note:
             raise AdminError(note)
         sh = self._shell if self._shell is not None else Shell("local", runner=self._runner)
         if sh.target != "local":
-            raise AdminError(f"Linux administration is for this native Linux machine, never {sh.where}")
+            raise AdminError(f"Linux administration is for the Linux the platform itself runs on, never {sh.where}")
         return sh
 
     def present(self) -> bool:
-        """A native Linux machine, the platform's own: never Windows, macOS or a WSL distribution."""
+        """Linux, the platform's own (a WSL distribution it runs inside too): never Windows or macOS."""
         if self.not_for_here():
             return False
         try:
@@ -290,16 +294,24 @@ class LinuxAdminPlugin(Admin):
             return "As root through sudo without a password (never asked for one)"
         return "It needs root, and sudo asks for a password here: run the platform as root, or let sudo run it without one"
 
+    def machine_tables(self) -> list[dict]:
+        """Inside a WSL distribution: what WSL changes for this plugin (the library's linux.wsl_table, liminal-libs
+        1.56.0), after its own tables. Nothing on a machine of its own, nor with an older library."""
+        table = getattr(linux, "wsl_table", None)
+        under = table("admin") if table is not None else None
+        return [under] if under else []
+
     def elsewhere(self) -> tuple[str, list[dict]]:
-        """What it does on a native Linux machine running the platform (a remote, say), said where it does not act: its
+        """What it does on Linux, where the platform runs (a remote, say), said where it does not act: its
         sections, and the unit it would install at boot (an example: that machine's own Python and user in it)."""
         app = next(iter(self.boot_apps()), None) or BootApp("platform", "Liminal Platform", "liminal_platform", 8775)
         unit = boot_unit(app.name)
-        words = ("On a native Linux machine running the platform (a remote, say) it shows and changes the services the "
+        words = ("On Linux, where the platform runs (a remote machine, say, or a WSL distribution), it shows and changes the services the "
                  "framework relies on, the apps' startups at logon (systemd user units) and the platform at boot, before anyone "
                  f"signs in ({unit}, a system unit: headless, as the platform's user, never root)")
-        sections = {"title": "What it does on a native Linux machine",
-                    "note": "Only on the native Linux machine the platform runs on: never on Windows, macOS or in a WSL distribution.",
+        sections = {"title": "What it does on Linux",
+                    "note": "Only on the Linux the platform itself runs on (a machine of its own, or a WSL distribution it runs "
+                            "inside): never from Windows or macOS.",
                     "columns": [{"title": "Section"}, {"title": "What it shows"}, {"title": "What it changes"}],
                     "rows": [["Rights", "root, or sudo without a password", "each change asks for root through sudo -n, never a password"],
                              ["Services the framework relies on", ", ".join(s[0] for s in self.SERVICES if s[3]) + "; an SSH server shown only",
@@ -367,7 +379,7 @@ class LinuxAdminPlugin(Admin):
             self.shell.run("service", name, action)
 
     def startups(self) -> list[Startup]:
-        sh = self.shell  # refused anywhere but a native Linux machine
+        sh = self.shell  # refused anywhere but on Linux
         script = "; ".join(f"echo '== {u}'; systemctl --user show -p LoadState,ActiveState,UnitFileState,ExecStart {u}.service"
                            for u in UNITS.values())
         try:
@@ -393,7 +405,7 @@ class LinuxAdminPlugin(Admin):
         return (self._home or Path.home()) / ".config" / "systemd" / "user" / f"{UNITS[app]}.service"
 
     def _register(self, app: str, command: list[str]) -> None:
-        sh = self.shell  # refused anywhere but a native Linux machine: no unit written
+        sh = self.shell  # refused anywhere but on Linux: no unit written
         path = self.unit_path(app)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(unit_text(app, command), encoding="utf-8")
@@ -401,7 +413,7 @@ class LinuxAdminPlugin(Admin):
         sh.run("systemctl", "--user", "enable", f"{UNITS[app]}.service", root=False)
 
     def _unregister(self, app: str) -> bool:
-        sh = self.shell  # refused anywhere but a native Linux machine: nothing removed
+        sh = self.shell  # refused anywhere but on Linux: nothing removed
         path = self.unit_path(app)
         existed = path.exists()
         sh.run("systemctl", "--user", "disable", "--now", f"{UNITS[app]}.service", root=False, check=False)
@@ -444,7 +456,7 @@ class LinuxAdminPlugin(Admin):
         return list(self._apps) if self._apps is not None else super().boot_apps()
 
     def boot_how(self) -> str:
-        init = self._init()  # refused anywhere but a native Linux machine
+        init = self._init()  # refused anywhere but on Linux
         if init == "systemd":
             return "a system unit (liminal-<app>-boot.service) started by systemd as you, never root, again after a failure"
         if init == "openrc":
@@ -540,7 +552,7 @@ class LinuxAdminPlugin(Admin):
         return Startup(app, name, state, command, "; ".join(notes), "boot", user or "root", unquoted(f.get("error_log", "")) or log, port)
 
     def _boot_register(self, app: BootApp, port: int, python: str | None = None) -> None:
-        sh = self.shell  # refused anywhere but a native Linux machine: nothing written
+        sh = self.shell  # refused anywhere but on Linux: nothing written
         user, home = self.boot_account()
         command = boot_command(app, port, python or self._python)
         init = self._init()
@@ -565,7 +577,7 @@ class LinuxAdminPlugin(Admin):
             self.shell.run("systemctl", action, boot.name)
 
     def _boot_unregister(self, boot: Startup) -> bool:
-        sh = self.shell  # refused anywhere but a native Linux machine: nothing removed
+        sh = self.shell  # refused anywhere but on Linux: nothing removed
         if self._init() == "openrc":
             path = f"{OPENRC_DIR}/{boot.name}"
             script = (f"if [ -e {path} ]; then rc-service {boot.name} stop >/dev/null 2>&1 || true; "

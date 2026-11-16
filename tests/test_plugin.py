@@ -2,8 +2,8 @@
 (started when stopped, never the SSH server), the apps' systemd user units read, run, made and removed, the
 processes; the platform's boot service (0.5.0) as a system unit or an OpenRC service, written as root through sudo -n,
 started, stopped and removed (asked twice), never as root; all through a stand-in for the commands (nothing runs here,
-nothing is written to /etc: the stand-in keeps the files); only on a native Linux machine: on Windows, macOS or in a WSL
-distribution nothing runs at all."""
+nothing is written to /etc: the stand-in keeps the files); only on Linux, a WSL distribution the platform runs inside
+included (0.8.0): on Windows or macOS nothing runs at all."""
 from __future__ import annotations
 
 import inspect
@@ -246,32 +246,32 @@ def test_a_user_unit_is_made_here_and_never_in_wsl(tmp_path, monkeypatch):
     assert "ExecStart=" in unit_text("charts", ["/usr/bin/python3", "-m", "liminal_charts", "gui"])
 
 
-def test_only_a_native_linux_machine_is_administered():
-    """The user, 2026-11-08: "the scope of linux administration is only on native linux O/S"; "it's not for
-    administrating WSL instances": on Windows, macOS or in a WSL distribution no command runs at all, the status says
-    why (the platform shows the plugin disabled), the setup and every command are refused."""
-    windows = why_not_native("win32", "10", {})
-    assert windows == ("Linux administration is for a native Linux machine, and this one runs Windows; "
-                       "Liminal's WSL distributions are the WSL plugins'")
-    wsl2 = why_not_native("linux", "6.6.87.2-microsoft-standard-WSL2", {"WSL_DISTRO_NAME": "Liminal-Ubuntu"})
-    assert "this is WSL's Liminal-Ubuntu on Windows" in wsl2
-    assert "this is a WSL distribution on Windows" in why_not_native("linux", "4.4.0-19041-Microsoft", {})  # WSL 1
-    assert why_not_native("linux", "6.8.0-48-generic", {"WSL_INTEROP": "/run/WSL/1_interop"})  # WSL's variables
-    assert "this one runs macOS" in why_not_native("darwin", "24.1.0", {})
-    assert why_not_native("linux", "6.8.0-48-generic", {}) == ""  # a native Linux machine
+def test_only_the_linux_the_platform_runs_on_is_administered():
+    """On Windows or macOS no command runs at all, the status says why (the platform shows the plugin disabled), the
+    setup and every command are refused: a platform there does not reach into a WSL distribution from outside (the
+    user, 2026-11-08: "it's not for administrating WSL instances"). On Linux it works, inside a WSL distribution too
+    (0.8.0, liminal-libs 1.56.0; the user, 2026-11-15: "wsl and firewall linux should always work under linux")."""
+    windows, macos = why_not_native("win32", "10", {}), why_not_native("darwin", "24.1.0", {})
+    assert windows.startswith("Linux administration is for ") and "and this one runs Windows" in windows
+    assert windows.endswith("Liminal's WSL distributions are the WSL plugins'") and "this one runs macOS" in macos
+    assert why_not_native("linux", "6.8.0-48-generic", {}) == ""  # a Linux machine of its own
+    if hasattr(linux_mod, "wsl_table"):  # liminal-libs 1.56.0: a WSL kernel is Linux like any other
+        assert why_not_native("linux", "6.6.87.2-microsoft-standard-WSL2", {"WSL_DISTRO_NAME": "Ubuntu"}) == ""
+        assert why_not_native("linux", "4.4.0-19041-Microsoft", {}) == ""  # WSL 1
+        assert why_not_native("linux", "6.8.0-48-generic", {"WSL_INTEROP": "/run/WSL/1_interop"}) == ""
     if sys.platform == "win32":
         assert why_not_native() == windows
-    for note in (windows, wsl2):
+    for note in (windows, macos):
         ran: list = []
         p = LinuxAdminPlugin(shell=Shell("local", runner=lambda args, timeout: ran.append(args) or (0, b"", b"")), native=note,
                              apps=[PLATFORM])
         st = p.status()
         assert (st["present"], st["valid"], st["summary"]) == (False, False, "not for this machine")
         assert st["applies"] is False  # not for this machine at all: the platform offers no setup
-        # what it does on a native Linux machine, said here (the user: "linux which doesn't say anything about startup")
-        assert st["why"].startswith(note + ". On a native Linux machine running the platform (a remote, say) it shows and changes")
+        # what it does on Linux, said here (the user: "linux which doesn't say anything about startup")
+        assert st["why"].startswith(note + ". On Linux, where the platform runs (a remote machine, say, or a WSL distribution), it shows and changes")
         assert "the apps' startups at logon (systemd user units)" in st["why"] and "liminal-platform-boot.service" in st["why"]
-        assert [t["title"] for t in st["tables"]] == ["What it does on a native Linux machine", "The unit it would install at boot"]
+        assert [t["title"] for t in st["tables"]] == ["What it does on Linux", "The unit it would install at boot"]
         sections = {r[0]: r for r in st["tables"][0]["rows"]}
         assert set(sections) == {"Rights", "Services the framework relies on", "Startups at your logon",
                                  "At boot, before anyone signs in", "The framework's processes"}
@@ -290,9 +290,29 @@ def test_only_a_native_linux_machine_is_administered():
                     lambda: p.register("platform", "boot", 8775), lambda: p.startup("platform", "start", "boot"),
                     lambda: p.unregister("platform", "boot", True), lambda: p.boot_startups([PLATFORM]),
                     p.services, p.startups, p.processes):
-            with pytest.raises(AdminError, match="native Linux machine"):
+            with pytest.raises(AdminError, match="and this one runs"):
                 ask()
         assert ran == []  # nothing ran anywhere
+
+
+def test_inside_a_wsl_distribution_it_works_and_says_what_wsl_changes(monkeypatch):
+    """0.8.0 (the user, 2026-11-15: "wsl and firewall linux should always work under linux, if wsl prevents or misses
+    some capability this should reflect in the plugin"): the platform inside a WSL distribution administers that
+    Linux as any other; its page carries the library's "Under WSL" table after its own."""
+    from liminal_libs.machines.admin import Admin
+
+    if not hasattr(Admin, "machine_tables"):
+        pytest.skip("liminal-libs before 1.56.0: its Admin base draws no table of the plugin's own")
+    monkeypatch.setattr(linux_mod.os, "geteuid", lambda: 0, raising=False)
+    under = {"title": "Under WSL", "columns": [], "rows": [["This Linux", "WSL 2: Ubuntu", ""]]}
+    monkeypatch.setattr(linux_mod, "wsl_table", lambda kind: under if kind == "admin" else None, raising=False)
+    st = plugin(FakeLinux()).status()
+    assert st["present"] and st["valid"] and "applies" not in st  # as on any Linux
+    assert st["tables"][-1] is under and len(st["tables"]) > 1  # its own tables first, then what WSL changes
+    monkeypatch.setattr(linux_mod, "wsl_table", lambda kind: None, raising=False)  # a machine of its own: no such table
+    assert all(t["title"] != "Under WSL" for t in plugin(FakeLinux()).status()["tables"])
+    monkeypatch.delattr(linux_mod, "wsl_table", raising=False)  # an older library: the plugin as it was
+    assert plugin(FakeLinux()).machine_tables() == []
 
 
 # -- at boot, before anyone signs in (0.5.0) ---------------------------------------------------------------------------

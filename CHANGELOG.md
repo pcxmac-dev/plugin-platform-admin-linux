@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 (2026-11-15)
+
+It works on any Linux the platform runs on, a WSL distribution included (the user: "wsl and firewall linux should
+always work under linux, if wsl prevents or misses some capability this should reflect in the plugin"). Until now it
+refused whenever the kernel was WSL's, which read the user's words of 2026-11-08 ("it's not for administrating WSL
+instances") too widely: those ruled out a platform on Windows reaching into a WSL distribution, and that stays so. A
+platform running inside a distribution administers that Linux as any other. With liminal-libs 1.56.0 (the library's
+check no longer refuses a WSL kernel): its services, the startups at logon and the boot service are read and changed
+there, and its page carries an "Under WSL" table saying what WSL changes: whether systemd is the init, that the
+distribution runs only while Windows keeps it started, and that "at boot" there means when the distribution starts.
+With an older library it is as it was. On Windows and macOS nothing changes: no command runs.
+
 ## 0.7.1 (2026-11-15)
 
 Drawn under the platform's OS plugins section, in the list on the left (the user: "then OS plugins" (the WSL distributions, the admin and the firewall plugins, as chosen)): `SECTION = "os"`, liminal-libs 1.51.0's machine-plugin attribute. liminal-platform 0.26.0 draws it; an older platform keeps the plugin under Machine plugins. Nothing else changes.
