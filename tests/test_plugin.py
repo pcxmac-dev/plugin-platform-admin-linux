@@ -18,8 +18,17 @@ from liminal_libs.machines.linux import Shell
 from liminal_libs.machines import linux as linux_mod
 
 import plugin_platform_admin_linux.__main__ as cli
+
 from plugin_platform_admin_linux import (MACHINE, UNITS, LinuxAdminPlugin, app_of_unit, blocks, boot_service, boot_unit,
                                          boot_unit_text, openrc_text, root_write, state_of, unit_text, unit_word, why_not_native)
+
+
+@pytest.fixture(autouse=True)
+def a_machine_of_its_own(monkeypatch):
+    """The tests say what machine the plugin is on; the one they happen to run on (a WSL distribution, where the
+    library adds its "Under WSL" table) is not read."""
+    if hasattr(linux_mod, "wsl_table"):
+        monkeypatch.setattr(linux_mod, "wsl_table", lambda kind, *a, **k: None)
 
 SYSTEMD_SHOW = {
     "docker": "LoadState=loaded\nActiveState=inactive\nUnitFileState=enabled\nDescription=Docker Application Container Engine\n",
