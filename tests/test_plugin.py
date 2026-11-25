@@ -23,6 +23,18 @@ from plugin_platform_admin_linux import (MACHINE, UNITS, LinuxAdminPlugin, app_o
                                          boot_unit_text, openrc_text, root_write, state_of, unit_text, unit_word, why_not_native)
 
 
+def shell_sudo() -> list[str]:
+    """The sudo the library's Shell puts before a command run as root on this machine when the platform is not root,
+    read from Shell.prefix itself (liminal-libs 1.80.0 made it sudo -n --), so the stand-ins follow the library
+    whoever runs the tests."""
+    shell = Shell("local")
+    shell.root = lambda: False  # the platform not root, as on a user's machine
+    return shell.prefix()
+
+
+SUDO = shell_sudo()
+
+
 @pytest.fixture(autouse=True)
 def a_machine_of_its_own(monkeypatch):
     """The tests say what machine the plugin is on; the one they happen to run on (a WSL distribution, where the
@@ -51,7 +63,7 @@ class FakeLinux:
 
     def __call__(self, args, timeout):
         self.calls.append(list(args))
-        cmd = args[args.index("--exec") + 1:] if "--exec" in args else (args[2:] if args[:2] == ["sudo", "-n"] else args)
+        cmd = args[args.index("--exec") + 1:] if "--exec" in args else (args[len(SUDO):] if args[:len(SUDO)] == SUDO else args)
         if cmd[:2] == ["sh", "-c"] and "/run/systemd/system" in cmd[2]:
             return 0, self.init + "\n", ""
         if cmd[:2] == ["sh", "-c"] and "systemctl show" in cmd[2] and "--user" not in cmd[2]:
@@ -123,7 +135,7 @@ class BootLinux(FakeLinux):
         return "".join(out)
 
     def __call__(self, args, timeout):
-        cmd = args[args.index("--exec") + 1:] if "--exec" in args else (args[2:] if args[:2] == ["sudo", "-n"] else args)
+        cmd = args[args.index("--exec") + 1:] if "--exec" in args else (args[len(SUDO):] if args[:len(SUDO)] == SUDO else args)
         script = cmd[2] if cmd[:2] == ["sh", "-c"] else ""
         if "<<'LIMINAL_FILE'" in script:  # a boot service written as root
             self.calls.append(list(args))
@@ -226,7 +238,7 @@ def test_the_setup_starts_docker_never_ssh_and_says_how_root_is_had(monkeypatch)
     refuse = openrc.__call__
 
     def no_sudo(args, timeout):
-        if args[:2] == ["sudo", "-n"]:
+        if args[:len(SUDO)] == SUDO:
             openrc.calls.append(list(args))
             return 1, "", "sudo: a password is required\n"
         return refuse(args, timeout)
@@ -374,11 +386,11 @@ def test_the_platform_is_registered_at_boot_as_a_system_unit_through_sudo(monkey
     path = "/etc/systemd/system/liminal-platform-boot.service"
     assert fake.files[path] == boot_unit_text(PLATFORM, [VENV, "-m", "liminal_platform", "serve", "--no-browser", "--port", "8775"], "ciara")
     assert fake.modes[path] == "0644" and "liminal-platform-boot.service" in fake.enabled
-    (wrote,) = [c for c in fake.calls if c[:3] == ["sudo", "-n", "sh"] and "LIMINAL_FILE" in c[-1]]
+    (wrote,) = [c for c in fake.calls if c[:len(SUDO) + 1] == [*SUDO, "sh"] and "LIMINAL_FILE" in c[-1]]
     assert "systemctl daemon-reload\nsystemctl enable liminal-platform-boot.service" in wrote[-1]
     assert (made.state, made.port, made.account, made.at) == ("stopped", 8775, "ciara", "boot") and made.detail == "at boot: enabled"
     a.startup("platform", "start", "boot")
-    assert fake.calls[-1] == ["sudo", "-n", "systemctl", "start", "liminal-platform-boot.service"]
+    assert fake.calls[-1] == [*SUDO, "systemctl", "start", "liminal-platform-boot.service"]
     assert {b["app"]: b["state"] for b in a.status()["bootServices"]}["platform"] == "starting"  # nothing answers at its port yet
     up = plugin(fake, apps=[PLATFORM, LAB], answering={8775}).status()
     assert {b["app"]: b["state"] for b in up["bootServices"]}["platform"] == "running" and "at boot: platform (running)" in up["summary"]
@@ -386,14 +398,14 @@ def test_the_platform_is_registered_at_boot_as_a_system_unit_through_sudo(monkey
     with pytest.raises(BootRefused, match="8775 is platform's"):
         a.register("lab", "boot", 8775)
     a.startup("platform", "stop", "boot")
-    assert fake.calls[-1] == ["sudo", "-n", "systemctl", "stop", "liminal-platform-boot.service"]
+    assert fake.calls[-1] == [*SUDO, "systemctl", "stop", "liminal-platform-boot.service"]
     with pytest.raises(RemovalRefused) as refused:
         a.unregister("platform", "boot")
     assert refused.value.accept == ACCEPT_REMOVAL and path in fake.files
     assert a.unregister("platform", "boot", accept_removal=True)["removed"] and path not in fake.files
     removal = fake.root_scripts[-1]
     assert "systemctl disable --now liminal-platform-boot.service" in removal and f"rm -f {path}" in removal
-    assert all(c[:2] == ["sudo", "-n"] for c in fake.calls if "LIMINAL_FILE" in c[-1] or c[-1].startswith("if [ -e /etc/"))
+    assert all(c[:len(SUDO)] == SUDO for c in fake.calls if "LIMINAL_FILE" in c[-1] or c[-1].startswith("if [ -e /etc/"))
 
 
 def test_under_openrc_the_boot_service_is_an_init_script_in_the_default_runlevel(monkeypatch):
@@ -406,7 +418,7 @@ def test_under_openrc_the_boot_service_is_an_init_script_in_the_default_runlevel
     path = "/etc/init.d/liminal-platform-boot"
     assert fake.modes[path] == "0755" and 'command_args="-m liminal_platform serve --no-browser --port 8780"' in fake.files[path]
     assert "rc-update add liminal-platform-boot default" in fake.root_scripts[-1] and "liminal-platform-boot" in fake.enabled
-    assert all(c[:2] != ["sudo", "-n"] for c in fake.calls)  # root already
+    assert all(c[:len(SUDO)] != SUDO for c in fake.calls)  # root already
     boot = {b.app: b for b in a.boot_startups(a.boot_apps())}["platform"]
     assert (boot.state, boot.port, boot.account, boot.log) == ("stopped", 8780, "ciara", "/var/log/liminal-platform-boot.log")
     assert boot.command == f"{VENV} -m liminal_platform serve --no-browser --port 8780" and "default runlevel" in boot.detail

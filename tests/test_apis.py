@@ -14,7 +14,7 @@ from liminal_libs.machines import linux as linux_mod
 from liminal_libs.sources.apis import dead_links, problems
 from plugin_platform_admin_linux import MACHINE
 from plugin_platform_admin_linux import apis as cards
-from test_plugin import PLATFORM, BootLinux, FakeLinux, plugin
+from test_plugin import PLATFORM, SUDO, BootLinux, FakeLinux, plugin
 
 
 def drive(monkeypatch, tmp_path):
@@ -65,7 +65,7 @@ def fragments(name: str) -> list[str]:
 
 def direct(args: list[str]) -> str | None:
     """A command run directly (not a script) as the cards name it; None for a script."""
-    cmd = args[2:] if args[:2] == ["sudo", "-n"] else args
+    cmd = args[len(SUDO):] if args[:len(SUDO)] == SUDO else args
     if cmd[:2] == ["sh", "-c"]:
         return None
     if cmd == ["true"]:
@@ -93,7 +93,8 @@ def test_the_cards_are_sound_and_each_says_where_its_documentation_is():
 
 def test_the_cards_name_every_command_it_runs_and_the_files_it_writes(monkeypatch, tmp_path):
     a, calls, boot_files = drive(monkeypatch, tmp_path)
-    texts = [" ".join(c) for c in calls]
+    # the cards name Shell's sudo as sudo -n: the -- it ends with (liminal-libs 1.80.0) is no word of theirs
+    texts = [" ".join([*(w for w in SUDO if w != "--"), *c[len(SUDO):]] if c[:len(SUDO)] == SUDO else c) for c in calls]
     used = {c.name for api in MACHINE.apis for c in api.used}
     ran = {d for c in calls if (d := direct(c))}
     assert ran <= used, sorted(ran - used)
