@@ -1,9 +1,13 @@
 """`python -m plugin_platform_admin_linux status | setup [STEP ...] | services | startups | boot | processes
 | service NAME start|stop|restart | startup APP run|end|enable|disable | startup APP start|stop --boot
 | register APP [--boot [--port N]] | unregister APP [--boot --accept-removal] | run [--elevated] -- COMMAND`: the plugin
-from the command line (the platform app drives the same hooks). `--boot`: the app's boot service (a system unit
-liminal-platform-boot.service, or an OpenRC service) rather than its user unit at logon; a boot service's removal is
-asked twice, so it needs --accept-removal."""
+from the command line, in its own process. The platform app asks the same hooks from its page, its changes only from
+there (PAGE_ONLY_HOOKS, 0.8.1), but for run(), which no route of the platform's asks since liminal-platform 0.34.1.
+`--boot`: the app's boot service (a system unit liminal-platform-boot.service, or an OpenRC service) rather than its
+user unit at logon; a boot service's removal is asked twice, so it needs --accept-removal. `run` runs the command as
+you, and as root (through the library's `sudo -n --`, liminal-libs 1.80.0, unless you are root) only with `--elevated`
+as its first word, before the command's `--` (0.8.1): every word after `--` is the command's own, an `--elevated` among
+them."""
 from __future__ import annotations
 
 import json
@@ -75,8 +79,8 @@ def main(argv: list[str] | None = None) -> int:
                 print("removed" if MACHINE.unregister(words[0]) else f"{words[0]} had no startup")
             return 0
         if what == "run":
-            elevated = "--elevated" in rest
-            rest = [w for w in rest if w != "--elevated"]
+            elevated = rest[:1] == ["--elevated"]  # a word of its own, before the command's `--`: never one of its words
+            rest = rest[1:] if elevated else rest
             command = rest[1:] if rest[:1] == ["--"] else rest
             if command:
                 print(MACHINE.run(*command, elevated=elevated), end="")

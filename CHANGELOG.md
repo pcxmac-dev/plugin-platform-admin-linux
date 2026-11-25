@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.8.1 (2026-11-24)
+
+The command line's `run` takes `--elevated` only as its first word, before the command's `--` (the review's finding
+PLT-H1, checked 2026-11-23). And from the review of that change, 2026-11-24, each finding checked a second time:
+`register` takes no program from an ask, the changes are asked only from the page, and the library it needs is 1.80.0.
+
+- **run's `--elevated`.** It took the word from anywhere, the command's own words after `--` included, and took it out
+  of them: `run -- grep --elevated notes.txt` ran `grep notes.txt` as root. Now `run -- COMMAND` runs the command as
+  you and `run --elevated -- COMMAND` as root (through the library's `sudo -n --` unless you are root); every word
+  after `--` is the command's own, an `--elevated` among them, the first too; `run --elevated` with no command shows
+  the usage and runs nothing. The plugin's `run()` was right already: as the platform's own user unless `elevated` is
+  said. Since liminal-platform 0.34.1 no route of the platform's asks it (`POST /api/machines/<name>/run` is gone; the
+  user, 2026-11-23: "Remove it"), only this command line and `liminal-platform machine admin-linux run`, each in its
+  own process.
+- **`register` takes no program from an ask** (the review's first finding, rated high; there since 0.1.0, at boot
+  since 0.5.0). The library's `register(app, at, port, python)` takes the Python a startup runs, and the platform's
+  `POST /api/machines/admin-linux/ask` hands an ask's arguments on as they come. So another account on this machine
+  could put a program at `/tmp/x` and ask `register` with `["charts", "logon", null, "/tmp/x"]`: your user unit
+  `liminal-charts.service` then ran it at every logon, and `startup` ran it at once. With `["platform", "boot", null,
+  "/tmp/x"]` root wrote a system unit running it at every boot, as your user. The page never sends that argument. Now
+  the plugin's own `register(app, at, port)` has none: an ask naming a program is refused as too many arguments (the
+  platform answers 400) before anything is written or run, and a startup runs this Python, the platform's own.
+- **The changes are asked only from the page** (`PAGE_ONLY_HOOKS`, liminal-libs 1.66.0's word; the review's second
+  finding, rated medium): `service`, `startup`, `register` and `unregister`, at your logon and at boot. Another
+  plugin's ask of one is refused (403), and liminal-platform 0.34.0 refuses one over HTTP (401) unless its login shows
+  that you are at the page. Before, any program on this machine asked them with the two headers PLT-H1 named, the
+  page's dialog being the only confirmation: ufw, firewalld or Docker stopped as root, the SSH server started. A
+  platform that holds no login asks them as before. The setup and the command line call the plugin's code directly,
+  not through an ask, so they work as before; so do its reads (`present`, `status`, `processes`).
+- `pyproject.toml`: liminal-libs>=1.80.0 (was 1.49.0), the release whose Shell puts `sudo -n --` before a command run
+  as root (the review's third finding, rated low). `run --elevated` relies on it: with an older one `run --elevated --
+  -u nobody id` runs id as nobody, sudo reading `-u` as its own, and the tests passed there, sudo's words read from
+  that library.
+- Tests: `tests/test_run.py`, over a stand-in shell (nothing runs): a command as you, and as root only when elevated, a
+  dash first too (sudo's words read from the library's Shell, `shell_sudo()` from `tests/test_plugin.py`, held to end
+  with `--` and the package's floor at 1.80.0); the command line's cases, `run -- --elevated COMMAND` among them (the
+  review's fourth finding: a parse taking the `--` first and `--elevated` after it ran that command as root, and no
+  test said otherwise). `tests/test_who_asks.py`, through the library's own App: the changes refused to another plugin
+  and to no one, nothing run, the page's ask run, its reads asked by anyone; `register` refusing a program, the page's
+  ask included, nothing written or run.
+
 ## 0.8.0 (2026-11-15)
 
 It works on any Linux the platform runs on, a WSL distribution included (the user: "wsl and firewall linux should

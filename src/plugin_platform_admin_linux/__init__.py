@@ -28,6 +28,15 @@ to, and present links that provide documentation"): systemd's systemctl and its 
 command, sudo and procps' ps, each with its makers' pages, its parts and its calls (apis.py), drawn on the plugin's
 page; `api_facts` says what it kept of them while it ran (whether sudo ran without a password, when last asked).
 
+Who may ask its changes (0.8.1; the review of PLT-H1's fix, 2026-11-24): a service started, stopped or restarted, and a
+startup run, ended, turned on or off, made or removed, at your logon or at boot, are asked only from its page
+(PAGE_ONLY_HOOKS): another plugin's ask is refused, and the platform asks its login whether you are at the page. Before,
+any program on this machine could ask them with two headers: ufw stopped as root, the SSH server started. Its reads are
+asked by anyone. And `register` takes no program from an ask: a startup runs this Python, the platform's own. The
+library's register takes one as its fourth argument and the platform hands an ask's arguments on as they come, so a
+program another account put in /tmp ran at every logon, or at every boot from a system unit root wrote. The command
+line calls the same code in its own process.
+
     python -m plugin_platform_admin_linux status | setup [STEP ...] | services | startups | boot | processes
                                           | service NAME start|stop|restart | startup APP run|end|enable|disable
                                           | startup APP start|stop --boot | register APP [--boot [--port N]]
@@ -49,7 +58,7 @@ from liminal_libs.machines.plugin import CommandError
 
 from .apis import APIS, facts
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -220,6 +229,12 @@ class LinuxAdminPlugin(Admin):
                 ("systemd-resolved", "systemd's DNS resolver", "every lookup: the mail record, the feeds", True),
                 ("ssh", "OpenSSH server", "remote access (shown; never started by the setup)", False),
                 ("sshd", "OpenSSH server", "remote access (shown; never started by the setup)", False))
+    # Its changes, asked only from its page (0.8.1, the review of PLT-H1's fix; liminal-libs 1.66.0's apps/asking.py):
+    # another plugin's ask is refused (403), and liminal-platform 0.34.0 refuses one over HTTP (401) unless its login
+    # shows that you are at the page. Before, any program on this machine could ask them with two headers, the page's
+    # dialog being the only confirmation: ufw, firewalld or Docker stopped as root, the SSH server started. The setup
+    # and the command line call their code directly, not through an ask; its reads are asked by anyone.
+    PAGE_ONLY_HOOKS = ("service", "startup", "register", "unregister")
 
     def __init__(self, shell: Shell | None = None, runner=None, home: Path | None = None, native: str | None = None,
                  user: tuple[str, str] | None = None, apps=None, logs: Path | None = None, python: str | None = None,
@@ -403,6 +418,14 @@ class LinuxAdminPlugin(Admin):
 
     def unit_path(self, app: str) -> Path:
         return (self._home or Path.home()) / ".config" / "systemd" / "user" / f"{UNITS[app]}.service"
+
+    def register(self, app: str, at: str = "logon", port=None) -> Startup:
+        """The app started from now on, made, not run: at your logon (its user unit), or `at` "boot" at boot, before
+        anyone signs in, at `port`. It runs this Python, the platform's own (a test's, given to the constructor), never
+        a program an ask names (0.8.1, the review of PLT-H1's fix): the library's register takes one as its fourth
+        argument, and the platform hands an ask's arguments on as they come. An ask naming one is refused as too many
+        arguments (TypeError) before anything is written or run."""
+        return super().register(app, at, port, self._python)
 
     def _register(self, app: str, command: list[str]) -> None:
         sh = self.shell  # refused anywhere but on Linux: no unit written

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 
 import pytest
 
@@ -29,7 +28,7 @@ def drive(monkeypatch, tmp_path):
     a.setup(log=lambda m: None)
     for action in ("start", "stop", "restart"):
         a.service("docker", action)
-    a.register("platform", python=sys.executable)
+    a.register("platform")
     assert a.unit_path("platform").exists()
     for action in ("run", "end", "enable", "disable"):
         a.startup("platform", action)

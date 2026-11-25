@@ -250,10 +250,11 @@ def test_a_user_unit_is_made_here_and_never_in_wsl(tmp_path, monkeypatch):
     monkeypatch.setattr(linux_mod.os, "geteuid", lambda: 1000, raising=False)
     fake = FakeLinux()
     a = plugin(fake, home=tmp_path)
-    a.register("platform", python=sys.executable)
+    a.register("platform")
     unit = tmp_path / ".config" / "systemd" / "user" / "liminal-platform.service"
     text = unit.read_text(encoding="utf-8")
-    assert "-m liminal_platform serve --no-browser" in text and "WantedBy=default.target" in text and "Restart=on-failure" in text
+    assert f"\nExecStart={VENV} -m liminal_platform serve --no-browser\n" in text  # this Python: the test's
+    assert "WantedBy=default.target" in text and "Restart=on-failure" in text
     cmds = [c for c in fake.calls if c[:2] == ["systemctl", "--user"]]
     assert ["systemctl", "--user", "daemon-reload"] in cmds and ["systemctl", "--user", "enable", "liminal-platform.service"] in cmds
     assert all(c[0] != "sudo" for c in cmds)  # a user's units, never as root
@@ -262,7 +263,7 @@ def test_a_user_unit_is_made_here_and_never_in_wsl(tmp_path, monkeypatch):
     assert a.unregister("platform") and not unit.exists() and not a.unregister("platform")
     in_wsl = LinuxAdminPlugin(shell=Shell("wsl:Liminal-Ubuntu", runner=fake), home=tmp_path, native="")
     with pytest.raises(AdminError, match="never WSL's Liminal-Ubuntu"):
-        in_wsl.register("platform", python=sys.executable)
+        in_wsl.register("platform")
     assert not unit.exists()
     assert "ExecStart=" in unit_text("charts", ["/usr/bin/python3", "-m", "liminal_charts", "gui"])
 
@@ -307,7 +308,7 @@ def test_only_the_linux_the_platform_runs_on_is_administered():
         assert p.setup(log=said.append) == [{"step": "privileges", "ok": False, "detail": note}]
         assert said == [f"admin-linux: privileges: FAILED: {note}"]
         for ask in (lambda: p.run("true"), lambda: p.service("docker", "start"), lambda: p.startup("platform", "run"),
-                    lambda: p.register("platform", python=sys.executable), lambda: p.unregister("platform"),
+                    lambda: p.register("platform"), lambda: p.unregister("platform"),
                     lambda: p.register("platform", "boot", 8775), lambda: p.startup("platform", "start", "boot"),
                     lambda: p.unregister("platform", "boot", True), lambda: p.boot_startups([PLATFORM]),
                     p.services, p.startups, p.processes):

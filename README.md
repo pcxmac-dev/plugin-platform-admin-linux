@@ -109,9 +109,16 @@ python -m plugin_platform_admin_linux register platform --boot --port 8775    # 
 python -m plugin_platform_admin_linux startup platform start --boot
 python -m plugin_platform_admin_linux unregister platform --boot --accept-removal
 python -m plugin_platform_admin_linux processes
+python -m plugin_platform_admin_linux run -- systemctl --user list-units      # as you
+python -m plugin_platform_admin_linux run --elevated -- systemctl status ufw  # as root, through sudo -n --
 ```
 
-The platform app drives the same hooks from its page.
+The platform app drives the same hooks from its page, its changes only from there (0.8.1): `service`, `startup`,
+`register` and `unregister` are its `PAGE_ONLY_HOOKS`, so another plugin's ask of one is refused, and the platform asks
+its login whether you are at the page before it asks one over HTTP. A startup runs this Python, the platform's own: no
+ask names the program. `run` is the command line's alone (no route of the platform's asks it since liminal-platform
+0.34.1): `--elevated` counts only as its first word, before the command's `--`, and every word after `--` is the
+command's own. It needs liminal-libs 1.80.0, whose `sudo -n --` reads no word of the command as sudo's.
 
 ## Its API
 
