@@ -187,10 +187,30 @@ def test_where_the_page_cannot_change_them_it_shows_the_one_command_and_no_form(
     assert command.startswith(line) and "-I -B -m liminal_libs.linuxsys apply" in command
 
 
-def test_a_found_group_holding_a_person_is_asked_twice_by_name():
-    p, m = on("collision", "system-group-mixed")
-    rows_ = rows(p)
-    assert any("not made" in str(r[1]) or "rename that group first" in str(r[1]) for r in rows_) or "linux-make" in forms(p)
+def test_a_found_group_holding_a_person_is_asked_twice_by_name_and_kept():
+    """The Linux firewall's switch made the system group liminal (the overlay firewall-group), and alice is in it too:
+    Make them... takes it as found only once asked by name, then makes the user alone; the group is said found."""
+    p, m = on(overlay="firewall-group")
+    m.files["/etc/passwd"] += ALICE
+    m.files["/etc/group"] = m.files["/etc/group"].replace("liminal:x:994:pat", "liminal:x:994:pat,alice")
+    make = forms(p)["linux-make"]
+    with pytest.raises(shared.Refused) as e:
+        send(p, make, (), standin.PASSWORD)
+    assert e.value.accept == "accept_members" and "with alice in it" in str(e.value) and m.sudo_runs == 0
+    done = send(p, make, ("accept_members",), standin.PASSWORD)
+    assert done["ok"] and m.sudo_runs == 1 and m.groups()["liminal"].gid == 994
+    assert row(p, "The group liminal")[1]["sub"] == "a system group; found here: undo keeps it"
+    assert row(p, "The user liminal")[1]["sub"].endswith("made by Liminal")
+
+
+@pytest.mark.parametrize("overlay, words", [
+    ("group-1001", "is not a system group (gid 1001): Liminal's user and group are not made; rename that group first"),
+    ("system-group-mixed", "has the member www-data, a system account: it may be another program's group"),
+    ("person-user", "is a person's account (uid 1001): Liminal's user and group are not made; rename that user first"),
+])
+def test_a_group_or_user_named_liminal_that_is_not_one_liminal_can_take_is_refused_in_words(overlay, words):
+    p, m = on("collision", overlay)
+    assert "linux-make" not in forms(p) and words in row(p, "Make them…")[1] and m.sudo_runs == 0
 
 
 def test_its_changes_are_asked_only_from_its_page():
