@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.9.0 (2026-11-26, provisional: it lands on the user's yes)
+
+Liminal's own user and group on Linux, made, changed and removed from the plugin's page or by one root command (Monday
+list item 19, part one, release one; the user, 2026-11-25: "Accounts and elevation"). The plugin is now built on the
+library's Linux standard interface, `liminal_libs.machines.linuxadmin.LinuxAdmin` (liminal-libs 1.101.0, provisional),
+which holds what the plain package `liminal_libs.linuxsys` knows of this Linux: its facts, how root is had, the
+account tool, and the journal of what Liminal made.
+
+- **The page.** "How root is had" and "Liminal's user and group" come first, then the sections as before, and a "This
+  Linux" table last (after "Under WSL" inside a distribution). How root is had: root, sudo or sudo-rs (whose
+  password), doas, su, run0 or pkexec only, or nothing; what a change asks here; that sudo writes each change's script
+  into the system's log. Liminal's user and group: the system group `liminal` (its number, made by Liminal or found),
+  Liminal's own system user `liminal` (its shell and home; adopted where it is a Liminal distribution's login user),
+  each member and whether the running platform has it, a change stopped part way, and the one root command.
+- **Its forms.** Make them... (the group with the platform's user in it, and Liminal's own system user), Add a
+  member..., Remove a member..., and Remove them..., which takes back what the journal
+  `/var/lib/liminal-linux/MADE` says Liminal made (the user's answer 2) and is always asked twice. Each is asked only
+  from the page (`linux_apply`, `linux_member` and `linux_undo` are `PAGE_ONLY_HOOKS`, the user's answer 6),
+  confirmed with its plan's sha256, and built again from fresh facts before it runs: a system that changed since is
+  refused. A member other than the platform's user is asked twice by name, and so is a found group with a person in
+  it. Where no password is asked (root, or sudo's listing giving ALL without one), every change is asked twice.
+- **The password field** is there only where sudo asks for one: "Your password for sudo", or root's under openSUSE's
+  targetpw. It goes to sudo once, on its standard input after sudo's own prompt, and is never kept or shown; a wrong
+  one is one failed sign-in and the form is offered again. Where doas or su gives root, where the platform runs as a
+  system account, or where nothing gives root, the page has no form and shows the one command to run once in a
+  terminal: `sudo <python> -I -B -m liminal_libs.linuxsys apply` (or after `doas`, or in `su -c '...'`). A terminal in
+  the page for doas and su comes later (the user's answer 7).
+- **Starting the platform again.** A member is in the running platform only once the platform is started again from a
+  new terminal (a new terminal tab under WSL): the page says so on the member's row until it is.
+- **How root is had is read once.** The rights the services' and boot services' sections say, `elevation()` and
+  `may_elevate()` come from the library's one Elevation: sudo's listing (`sudo -n -l`), read at most once in 5 min,
+  each read possibly writing a line in the system's log. `sudo -n true` is no longer run. Those changes still run
+  through `sudo -n` and never ask a password; their password fields are a later release's.
+- **When the platform stops** mid-change, the base's `app_stopping` ends a sudo still at its prompt (nothing ran) and
+  lets a script that has begun finish its step; the next status says what is left, and Make them... again finishes it.
+- **The cards.** sudo's says the conversation (`-S -k -u root -p <prompt>`), the listing and `sudo -V`, sudo-rs and
+  OpenDoas among its links. Two new cards come from the library's `linuxsys.plan.TOOLS`, every program its probe and
+  root scripts run: "Linux accounts (shadow, BusyBox, systemd-sysusers)" and "The system's tools (the probe and the
+  root script)". `api_facts` says whether root was had without a password when last read.
+- **The command line.** `accounts` shows Liminal's user and group as the page's table does, and `accounts --json` the
+  facts as the page reads them (`linux_facts`). Neither changes anything: the usage names the one root command.
+- `pyproject.toml`: liminal-libs>=1.101.0 (was 1.80.0), the release with `machines.linuxadmin` and `linuxsys`.
+- Nothing runs as Liminal's user yet (the user's answer 10), no capability is given it (answer 9), and no grant,
+  unit, package or folder of state is made: those are later releases'.
+- Tests: `tests/test_accounts.py` (new), on the library's recorded machines (`liminal_libs.linuxsys.standin`; no
+  process starts, no sudo runs): the two sections and their forms sent as the platform's page sends them, one sudo
+  per confirmed click, the password only on sudo's standard input, Remove them... giving the first tree back, the
+  found group asked by name, the names Liminal cannot take refused in words, doas, su and a service account showing
+  the command, the command line's `accounts`, the library floor. `tests/conftest.py` refuses the base's real readers
+  in every test and fails one that reached them. `tests/test_apis.py` drives the new forms and holds every program
+  the machines played to a card; `tests/test_who_asks.py` the three new page-only hooks; `tests/test_contract.py` the
+  library's node check. The old tests read how root is had from a recorded machine.
+
 ## 0.8.1 (2026-11-24)
 
 The command line's `run` takes `--elevated` only as its first word, before the command's `--` (the review's finding
