@@ -37,10 +37,25 @@ library's register takes one as its fourth argument and the platform hands an as
 program another account put in /tmp ran at every logon, or at every boot from a system unit root wrote. The command
 line calls the same code in its own process.
 
+Liminal's user and group (0.9.0; Monday list item 19, release one, the user, 2026-11-25: "Accounts and elevation"):
+the plugin is built on the library's Linux standard interface, machines.linuxadmin.LinuxAdmin (liminal-libs 1.101.0),
+and its page shows "How root is had" and "Liminal's user and group" first. There Make them... makes the system group
+`liminal` with the platform's user in it and Liminal's own system user `liminal`; Add a member... and Remove a
+member... change who is in the group; Remove them... takes back what the journal /var/lib/liminal-linux/MADE says
+Liminal made (asked twice). Each is asked only from the page, confirmed with its plan's sha256, and asked twice where no
+password is asked. A password field is there only where sudo asks for one: the password goes to sudo once, on its
+standard input after its own prompt, and is never kept. Where doas or su gives root, or nothing does, the page shows
+the one root command instead (`sudo python -I -B -m liminal_libs.linuxsys apply`). A member is in the running
+platform only once the platform is started again from a new terminal, and the page says so. How root is had is read
+once, by the library (linuxsys's facts and sudo's listing, at most once in 5 min): the rights the page says for the
+services and the boot services come from it, and `sudo -n true` is no longer run. Those changes still run through
+`sudo -n`, never asking a password.
+
     python -m plugin_platform_admin_linux status | setup [STEP ...] | services | startups | boot | processes
                                           | service NAME start|stop|restart | startup APP run|end|enable|disable
                                           | startup APP start|stop --boot | register APP [--boot [--port N]]
                                           | unregister APP [--boot --accept-removal] | run [--elevated] -- COMMAND
+                                          | accounts [--json]
 """
 from __future__ import annotations
 
@@ -50,15 +65,16 @@ import shlex
 import time
 from pathlib import Path
 
-from liminal_libs import web
+from liminal_libs import linuxsys, web
 from liminal_libs.machines import linux
-from liminal_libs.machines.admin import Admin, AdminError, BootApp, BootRefused, Startup, SystemService, app_of, boot_command
+from liminal_libs.machines.admin import AdminError, BootApp, BootRefused, Startup, SystemService, app_of, boot_command
 from liminal_libs.machines.linux import Shell
+from liminal_libs.machines.linuxadmin import LinuxAdmin
 from liminal_libs.machines.plugin import CommandError
 
 from .apis import APIS, facts
 
-__version__ = "0.8.1"
+__version__ = "0.9.0"
 UNITS = {"charts": "liminal-charts", "integrator": "liminal-integrator", "login": "liminal-login", "platform": "liminal-platform"}
 TASK_VERBS = {"run": "start", "end": "stop", "enable": "enable", "disable": "disable"}
 RESTART_SECONDS = 10
@@ -71,7 +87,8 @@ USER_NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")  # an account a unit's User= o
 WORD = re.compile(r"[A-Za-z0-9_./+@:,=-]+")  # a word a unit or an init script carries as it is
 SPACED = re.compile(r"[A-Za-z0-9_./+@:,=%$ -]+")  # a word a unit carries once quoted (% and $ doubled)
 BACKOFF = (6, 600)  # systemd 254 and later: RestartSteps, RestartMaxDelaySec (older ones say the keys are unknown and go on)
-SUDO_S = 10.0  # whether sudo runs without a password is asked again after this long
+SUDO_S = linuxsys.SUDO_S  # sudo's listing is read at most once in this long (0.9.0, the library's; was 10 s)
+ROOT_TOOLS = {"sudo": "sudo", "sudo-rs": "sudo-rs", "doas": "doas", "su": "su", "run0": "run0", "pkexec": "pkexec"}
 END = "LIMINAL_FILE"  # the here-document's end when a file is written as root
 
 
@@ -212,13 +229,14 @@ def unquoted(value: str) -> str:
     return v[1:-1] if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'" else v
 
 
-class LinuxAdminPlugin(Admin):
+class LinuxAdminPlugin(LinuxAdmin):
     name = "admin-linux"
     title = "Linux administration"
     about = ("The Linux the platform runs on, a WSL distribution it runs inside included: root's rights and how they are had, "
-             "the services the framework relies on, the apps' systemd user units, the platform's at boot, the framework's processes")
+             "Liminal's user and group, the services the framework relies on, the apps' systemd user units, the "
+             "platform's at boot, the framework's processes")
     api = "2.2"
-    apis = APIS  # what it attaches to: systemctl, OpenRC, service, sudo, ps (apis.py)
+    apis = APIS  # what it attaches to: systemctl, OpenRC, service, sudo, ps, the account tools, the system's tools
     order = 721
     SECTION = "os"  # drawn under the platform's OS plugins (liminal-platform 0.26.0)
     BOOT_SERVICES = True
@@ -233,12 +251,14 @@ class LinuxAdminPlugin(Admin):
     # another plugin's ask is refused (403), and liminal-platform 0.34.0 refuses one over HTTP (401) unless its login
     # shows that you are at the page. Before, any program on this machine could ask them with two headers, the page's
     # dialog being the only confirmation: ufw, firewalld or Docker stopped as root, the SSH server started. The setup
-    # and the command line call their code directly, not through an ask; its reads are asked by anyone.
-    PAGE_ONLY_HOOKS = ("service", "startup", "register", "unregister")
+    # and the command line call their code directly, not through an ask; its reads are asked by anyone. From 0.9.0
+    # the base's three too: Make them..., Add or Remove a member..., Remove them... (the user's answer 6).
+    PAGE_ONLY_HOOKS = (*LinuxAdmin.PAGE_ONLY_HOOKS, "service", "startup", "register", "unregister")
 
     def __init__(self, shell: Shell | None = None, runner=None, home: Path | None = None, native: str | None = None,
                  user: tuple[str, str] | None = None, apps=None, logs: Path | None = None, python: str | None = None,
-                 listening=None):
+                 listening=None, linux=None):
+        self._linux = linux  # a test's recorded machine (liminal_libs.linuxsys.standin.Machine): the probe, sudo
         self._shell = shell
         self._runner = runner
         self._home = home
@@ -248,11 +268,34 @@ class LinuxAdminPlugin(Admin):
         self._logs = logs  # a test's logs folder; None: the platform's
         self._python = python  # a test's Python; None: this one
         self._listening = listening or web.listening  # whether something answers at a port (a test's stand-in)
-        self._sudo: tuple[float, bool] | None = None  # whether sudo ran without a password, when last asked
+        self._sudo: tuple[float, bool] | None = None  # whether root is had without a password, when last read
 
     def api_facts(self) -> dict:
-        """What it kept of its APIs while it ran, asking nothing: whether sudo ran without a password, when last asked."""
+        """What it kept of its APIs while it ran, asking nothing: whether root is had without a password, when last
+        read."""
         return facts(self)
+
+    # -- the library's linuxsys, through this plugin (0.9.0) -------------------------------------------------------
+    def linux_run(self, argv, timeout):
+        """The probe and sudo's listing, as the platform's user: the base's (proctree, the frame's environment), or a
+        test's recorded machine."""
+        if self._linux is not None:
+            return self._linux.run(argv, timeout)
+        return super().linux_run(argv, timeout)
+
+    def linux_spawn(self, argv):
+        """sudo's conversation: the base's (lifecycle.spawn, owned by this plugin in the ledger), or a test's recorded
+        machine."""
+        if self._linux is not None:
+            return self._linux.spawn(argv)
+        return super().linux_spawn(argv)
+
+    def _root_way(self):
+        """How root is had here, as the library read it (linuxsys's Elevation); None where it cannot be read."""
+        try:
+            return self.linux_system().elevation()
+        except Exception:  # noqa: BLE001 - a read that fails is a way without root: the page says it needs root
+            return None
 
     def not_for_here(self) -> str:
         """Why the machine the platform runs on is not Linux, in words ("" when it is): the library's
@@ -284,21 +327,19 @@ class LinuxAdminPlugin(Admin):
         return self.shell.root()
 
     def may_elevate(self) -> bool:
-        """Root's rights are had when a change needs them: the platform is root, or sudo runs without a password (asked
-        again after SUDO_S)."""
-        sh = self.shell
-        if sh.root():
+        """Root's rights are had when a change needs them: the platform is root, or sudo runs without a password, as
+        sudo's listing says (0.9.0: the library's one Elevation, the listing read at most once in SUDO_S; before, `sudo
+        -n true` every 10 s)."""
+        if self.shell.root():
             return True
-        now = time.monotonic()
-        if self._sudo is not None and now - self._sudo[0] < SUDO_S:
-            return self._sudo[1]
-        try:
-            sh.run("true")  # sudo -n true
-            ok = True
-        except CommandError:
-            ok = False
-        self._sudo = (now, ok)
+        way = self._root_way()
+        ok = way is not None and way.tool in ("sudo", "sudo-rs") and way.field() == "no"
+        self._sudo = (time.monotonic(), ok)
         return ok
+
+    def _root_tool(self) -> str:
+        way = self._root_way()
+        return ROOT_TOOLS.get(way.tool if way is not None else "", "")
 
     def rights_words(self, kind: str) -> str:
         if kind == "logon":
@@ -306,8 +347,15 @@ class LinuxAdminPlugin(Admin):
         if self.shell.root():
             return ""
         if self.may_elevate():
-            return "As root through sudo without a password (never asked for one)"
-        return "It needs root, and sudo asks for a password here: run the platform as root, or let sudo run it without one"
+            return f"As root through {self._root_tool()} without a password (never asked for one)"
+        tool = self._root_tool()
+        if tool in ("sudo", "sudo-rs"):
+            return (f"It needs root, and {tool} asks for a password here: run the platform as root, or let {tool} run it "
+                    "without one")
+        if tool:
+            return (f"It needs root, and {tool} gives it here only to a password typed in a terminal: run the platform "
+                    "as root")
+        return "It needs root, and nothing here gives it to the platform's user: run the platform as root"
 
     def machine_tables(self) -> list[dict]:
         """Inside a WSL distribution: what WSL changes for this plugin (the library's linux.wsl_table, liminal-libs
@@ -323,12 +371,19 @@ class LinuxAdminPlugin(Admin):
         unit = boot_unit(app.name)
         words = ("On Linux, where the platform runs (a remote machine, say, or a WSL distribution), it shows and changes the services the "
                  "framework relies on, the apps' startups at logon (systemd user units) and the platform at boot, before anyone "
-                 f"signs in ({unit}, a system unit: headless, as the platform's user, never root)")
+                 f"signs in ({unit}, a system unit: headless, as the platform's user, never root), and Liminal's own "
+                 "user and group")
         sections = {"title": "What it does on Linux",
                     "note": "Only on the Linux the platform itself runs on (a machine of its own, or a WSL distribution it runs "
                             "inside): never from Windows or macOS.",
                     "columns": [{"title": "Section"}, {"title": "What it shows"}, {"title": "What it changes"}],
-                    "rows": [["Rights", "root, or sudo without a password", "each change asks for root through sudo -n, never a password"],
+                    "rows": [["How root is had", "root, sudo or sudo-rs (whose password), doas, su, run0 or pkexec, "
+                              "or none", "nothing: the services' and boot services' changes ask for root through sudo "
+                              "-n, never a password"],
+                             ["Liminal's user and group", "the system group liminal and its members, Liminal's own "
+                              "system user liminal, what Liminal made (its journal), the one root command",
+                              "Make them..., Add or Remove a member..., Remove them... (asked twice), each confirmed "
+                              "with its plan's sha256; a password typed on the form only where sudo asks for one"],
                              ["Services the framework relies on", ", ".join(s[0] for s in self.SERVICES if s[3]) + "; an SSH server shown only",
                               "start, stop, restart, each confirmed; the setup starts those stopped, never an SSH server"],
                              ["Startups at your logon", "a systemd user unit per app in ~/.config/systemd/user: "
@@ -345,14 +400,17 @@ class LinuxAdminPlugin(Admin):
         return words, [sections, installed]
 
     def elevation(self) -> str:
-        sh = self.shell
-        if sh.root():
+        """How root is had, in words, as the library read it (0.9.0: no `sudo -n true`)."""
+        if self.shell.root():
             return "the platform runs as root"
-        try:
-            sh.run("true")  # sudo -n true
-            return "not root; sudo without a password"
-        except CommandError:
-            return "not root, and sudo asks for a password: run the platform as root, or allow it sudo without one"
+        if self.may_elevate():
+            return f"not root; {self._root_tool()} without a password"
+        tool = self._root_tool()
+        if tool in ("sudo", "sudo-rs"):
+            return f"not root, and {tool} asks for a password: run the platform as root, or allow it {tool} without one"
+        if tool:
+            return f"not root; {tool} asks for a password in a terminal: run the platform as root"
+        return "not root, and nothing here gives root to the platform's user: run the platform as root"
 
     def _init(self) -> str:
         """systemd, OpenRC or the service command, as the target has."""

@@ -13,6 +13,7 @@ import sys
 
 import pytest
 
+from liminal_libs.linuxsys import standin
 from liminal_libs.machines.admin import ACCEPT_REMOVAL, PLATFORM_APP, AdminError, BootApp, BootRefused, RemovalRefused
 from liminal_libs.machines.linux import Shell
 from liminal_libs.machines import linux as linux_mod
@@ -187,11 +188,22 @@ def boot_table(st):
     return table_of(st, "At boot, before anyone signs in")
 
 
-def plugin(fake, home=None, apps=(), user=("ciara", "/home/ciara"), answering=()):
+UBUNTU = "wsl-ubuntu-24.04"  # the library's recorded machine: the user's Ubuntu, read 2026-11-17, names replaced
+
+
+def recorded(sudo_ok: bool = True) -> standin.Machine:
+    """The recorded machine the library's linuxsys reads (0.9.0: the probe, sudo's listing): sudo without a password
+    (its overlay nopasswd-all, as a cloud image's first user has) or asking for one."""
+    return standin.Machine(UBUNTU, "nopasswd-all" if sudo_ok else None)
+
+
+def plugin(fake, home=None, apps=(), user=("ciara", "/home/ciara"), answering=(), linux=None):
     """The plugin on a native Linux machine (the test's word), its commands through the stand-in; its boot apps the
-    test's (none by default: nothing of the platform imported), its account the test's."""
+    test's (none by default: nothing of the platform imported), its account the test's; how root is had read from a
+    recorded machine that says what the stand-in's sudo does (0.9.0)."""
     return LinuxAdminPlugin(shell=Shell("local", runner=fake), home=home, native="", user=user, apps=list(apps),
-                            logs=None, python=VENV, listening=lambda port: port in answering)
+                            logs=None, python=VENV, listening=lambda port: port in answering,
+                            linux=linux if linux is not None else recorded(getattr(fake, "sudo_ok", True)))
 
 
 def test_the_plugin_reads_services_startups_and_processes_under_systemd(monkeypatch):
@@ -208,7 +220,8 @@ def test_the_plugin_reads_services_startups_and_processes_under_systemd(monkeypa
     assert st["frameworkProcesses"] == [{"pid": 4242, "app": "charts", "command": "/usr/bin/python3 -m liminal_charts gui --no-browser --port 8765", "memoryMb": 512}]
     assert st["elevated"] and st["elevation"] == "the platform runs as root" and st["valid"] and st["why"] == ""
     assert st.get("applies", True)
-    assert st["summary"] == "elevated; services: 3 running, stopped: docker, ssh; startups: integrator; 1 Liminal process(es)"
+    assert st["summary"] == ("elevated; services: 3 running, stopped: docker, ssh; startups: integrator; 1 Liminal "
+                             "process(es); the group liminal: not here")
     assert blocks("== a\nX=1\n== b\nY=2\n") == {"a": {"X": "1"}, "b": {"Y": "2"}} and state_of({}) == "absent"
 
 
@@ -231,8 +244,10 @@ def test_the_setup_starts_docker_never_ssh_and_says_how_root_is_had(monkeypatch)
     assert st["valid"] and st["why"] == "" and "sudo asks for a password here" in table_of(st, "Services the framework relies on")["note"]
     logon = table_of(st, "Startups at your logon")
     assert "no root is needed" in logon["note"] and {r[0]: r for r in logon["rows"]}["integrator"][3]["title"] == "End…"
-    assert [t["title"] for t in st["tables"]] == ["Services the framework relies on", "Startups at your logon",
-                                                  "At boot, before anyone signs in", "The framework's processes"]
+    assert [t["title"] for t in st["tables"]] == ["How root is had", "Liminal's user and group",  # 0.9.0
+                                                  "Services the framework relies on", "Startups at your logon",
+                                                  "At boot, before anyone signs in", "The framework's processes",
+                                                  "This Linux"]
     # under OpenRC the services are read as root when it may, else as the platform's user: still read, still valid
     openrc = FakeLinux(init="openrc", sudo_ok=False)
     refuse = openrc.__call__
@@ -242,7 +257,8 @@ def test_the_setup_starts_docker_never_ssh_and_says_how_root_is_had(monkeypatch)
             openrc.calls.append(list(args))
             return 1, "", "sudo: a password is required\n"
         return refuse(args, timeout)
-    st = LinuxAdminPlugin(shell=Shell("local", runner=no_sudo), native="", user=("ciara", "/home/ciara"), apps=[]).status()
+    st = LinuxAdminPlugin(shell=Shell("local", runner=no_sudo), native="", user=("ciara", "/home/ciara"), apps=[],
+                          linux=recorded(sudo_ok=False)).status()
     assert st["valid"] and {s["name"]: s["state"] for s in st["frameworkServices"]}["docker"] == "stopped"
 
 
@@ -295,8 +311,10 @@ def test_only_the_linux_the_platform_runs_on_is_administered():
         assert "the apps' startups at logon (systemd user units)" in st["why"] and "liminal-platform-boot.service" in st["why"]
         assert [t["title"] for t in st["tables"]] == ["What it does on Linux", "The unit it would install at boot"]
         sections = {r[0]: r for r in st["tables"][0]["rows"]}
-        assert set(sections) == {"Rights", "Services the framework relies on", "Startups at your logon",
-                                 "At boot, before anyone signs in", "The framework's processes"}
+        assert set(sections) == {"How root is had", "Liminal's user and group", "Services the framework relies on",
+                                 "Startups at your logon", "At boot, before anyone signs in",
+                                 "The framework's processes"}
+        assert "Remove them... (asked twice)" in sections["Liminal's user and group"][2]
         assert "liminal-platform.service" in sections["Startups at your logon"][1] and "asked twice" in sections["At boot, before anyone signs in"][2]
         unit = st["tables"][1]
         assert unit["columns"] == [{"title": "/etc/systemd/system/liminal-platform-boot.service"}]
@@ -330,7 +348,8 @@ def test_inside_a_wsl_distribution_it_works_and_says_what_wsl_changes(monkeypatc
     monkeypatch.setattr(linux_mod, "wsl_table", lambda kind: under if kind == "admin" else None, raising=False)
     st = plugin(FakeLinux()).status()
     assert st["present"] and st["valid"] and "applies" not in st  # as on any Linux
-    assert st["tables"][-1] is under and len(st["tables"]) > 1  # its own tables first, then what WSL changes
+    # its own tables first, then what WSL changes, then This Linux (0.9.0, the library's LinuxAdmin)
+    assert st["tables"][-2] is under and st["tables"][-1]["title"] == "This Linux" and len(st["tables"]) > 2
     monkeypatch.setattr(linux_mod, "wsl_table", lambda kind: None, raising=False)  # a machine of its own: no such table
     assert all(t["title"] != "Under WSL" for t in plugin(FakeLinux()).status()["tables"])
     monkeypatch.delattr(linux_mod, "wsl_table", raising=False)  # an older library: the plugin as it was

@@ -9,11 +9,17 @@ import re
 
 import pytest
 
+from liminal_libs.linuxsys import facts as probe
+from liminal_libs.linuxsys import plan, standin
 from liminal_libs.machines import linux as linux_mod
 from liminal_libs.sources.apis import dead_links, problems
 from plugin_platform_admin_linux import MACHINE
 from plugin_platform_admin_linux import apis as cards
-from test_plugin import PLATFORM, SUDO, BootLinux, FakeLinux, plugin
+from test_plugin import PLATFORM, SUDO, UBUNTU, BootLinux, FakeLinux, plugin
+
+# what the library's linuxsys runs for Liminal's user and group (0.9.0): held by the test of its own below
+LINUXSYS = {c.name for c in (*cards.ACCOUNTS_API.calls, *cards.SYSTEM_TOOLS.calls)} | {
+    c.name for c in cards.SUDO_API.calls if c.name.startswith(("sudo -V", "env LC_ALL=C"))}
 
 
 def drive(monkeypatch, tmp_path):
@@ -67,8 +73,6 @@ def direct(args: list[str]) -> str | None:
     cmd = args[len(SUDO):] if args[:len(SUDO)] == SUDO else args
     if cmd[:2] == ["sh", "-c"]:
         return None
-    if cmd == ["true"]:
-        return "sudo -n true"
     if cmd[:2] == ["systemctl", "--user"]:
         return f"systemctl --user {cmd[2]}" + ("" if cmd[2] == "daemon-reload" else
                                                " --now <unit>" if "--now" in cmd else " <unit>")
@@ -83,8 +87,11 @@ def direct(args: list[str]) -> str | None:
 
 def test_the_cards_are_sound_and_each_says_where_its_documentation_is():
     assert problems(MACHINE.apis) == [] and MACHINE.apis == cards.APIS
-    assert [a.name for a in MACHINE.apis] == ["systemd (systemctl)", "OpenRC", "SysV service", "sudo", "ps (procps-ng)"]
-    assert all(a.docs and a.verified == "2026-11-11" and a.used and a.covered for a in MACHINE.apis)
+    assert [a.name for a in MACHINE.apis] == ["systemd (systemctl)", "OpenRC", "SysV service", "sudo", "ps (procps-ng)",
+                                              "Linux accounts (shadow, BusyBox, systemd-sysusers)",
+                                              "The system's tools (the probe and the root script)"]
+    assert all(a.docs and a.verified in ("2026-11-11", "2026-11-17", "2026-11-24") and a.used and a.covered
+               for a in MACHINE.apis)
     assert all(len(a.areas) > len(a.covered) for a in MACHINE.apis)  # more of each API than the plugin uses
     assert cards.SYSTEMCTL.link("reference") == "https://www.freedesktop.org/software/systemd/man/latest/systemctl.html"
     assert not any(c.costs for a in MACHINE.apis for c in a.calls)  # nothing here costs money
@@ -99,7 +106,7 @@ def test_the_cards_name_every_command_it_runs_and_the_files_it_writes(monkeypatc
     assert ran <= used, sorted(ran - used)
     for api in MACHINE.apis:
         for call in api.used:
-            if call.name.startswith(("~/", "/etc/")):  # a file it writes
+            if call.name.startswith(("~/", "/etc/")) or call.name in LINUXSYS:  # a file it writes; linuxsys's
                 continue
             assert all(any(f in t for t in texts) for f in fragments(call.name)), f"{api.name}: {call.name} is not run"
     assert str(a.unit_path("platform")).replace("\\", "/").endswith(".config/systemd/user/liminal-platform.service")
@@ -118,9 +125,60 @@ def test_its_facts_are_what_it_kept_and_asking_them_runs_nothing(monkeypatch):
     before = len(fake.calls)
     facts = a.api_facts()
     assert len(fake.calls) == before  # nothing run
-    assert facts == {"sudo": {"Without a password": "yes (asked 0 s ago)"}}
+    assert facts == {"sudo": {"Without a password": "yes (read 0 s ago)"}}
     refused = plugin(FakeLinux(sudo_ok=False))
     assert not refused.may_elevate() and refused.api_facts()["sudo"]["Without a password"].startswith("no: it asks for one")
+
+
+def drive_accounts(monkeypatch) -> list[standin.Machine]:
+    """Liminal's user and group on recorded machines, each change as the page sends it: on the user's Ubuntu
+    (systemd-sysusers, sudo asking for the password) Make them..., Add and Remove a member..., Remove them...; on
+    Ubuntu 26.04 (sudo-rs) Make them... and Remove them...; and Alpine's page drawn (doas: no change from the page)."""
+    from test_accounts import click, forms
+
+    monkeypatch.setattr(linux_mod.os, "geteuid", lambda: 1000, raising=False)
+    out = []
+    for name, members in ((UBUNTU, True), ("ubuntu-26.04", False)):
+        m = standin.Machine(name)
+        if members:
+            m.files["/etc/passwd"] += "alice:x:1001:1001:Alice:/home/alice:/bin/bash\n"
+        p = plugin(FakeLinux(sudo_ok=False), linux=m)
+        assert click(p, forms(p)["linux-make"], standin.PASSWORD)["ok"]
+        if members:
+            assert click(p, forms(p)["linux-member-add:alice"], standin.PASSWORD)["ok"]
+            assert click(p, forms(p)["linux-member-remove:alice"], standin.PASSWORD)["ok"]
+        assert click(p, forms(p)["linux-undo"], standin.PASSWORD)["ok"]
+        out.append(m)
+    alpine = standin.Machine("alpine-3.24")
+    plugin(FakeLinux(sudo_ok=False), linux=alpine).status()
+    return [*out, alpine]
+
+
+def _words(argv: list[str]) -> str:
+    """An argv as the cards name it: env and sudo by their names, not their paths."""
+    named = [w.rsplit("/", 1)[-1] if i in (0, 2) and w.rsplit("/", 1)[-1] in ("env", "sudo", "sudo-rs") else w
+             for i, w in enumerate(argv)]
+    return " ".join(named)
+
+
+def test_the_cards_name_every_program_liminal_s_user_and_group_runs(monkeypatch):
+    """0.9.0: every program the library's probe and root scripts may run (linuxsys.plan.TOOLS) is a call on a card;
+    every program the recorded machines played for the page's changes is a used one; and what the plugin asked of
+    the machines (the probe, sudo's version and listing, sudo's conversation) is on the sudo card."""
+    first = {c.name.split()[0]: c for api in MACHINE.apis for c in api.calls}
+    assert {name for name, _, _ in plan.TOOLS} <= set(first), sorted({n for n, _, _ in plan.TOOLS} - set(first))
+    machines = drive_accounts(monkeypatch)
+    played = {p for m in machines for p in m.programs}
+    assert {"systemd-sysusers", "gpasswd", "userdel"} <= played  # userdel takes the group of its name with it
+    assert all(first[p].used for p in played), sorted(p for p in played if not first[p].used)
+    asked = [_words(c["argv"]) for m in machines for c in m.calls]
+    assert any(c["argv"] == list(probe.ARGV) for m in machines for c in m.calls)  # the probe, as sh -c
+    assert ("sudo", "-V") in probe.VERSIONS  # what the probe asks sudo, named on the card
+    for call in cards.SUDO_API.used:
+        if call.name.startswith("env LC_ALL=C"):
+            assert any(all(f in a for f in fragments(call.name)) for a in asked), f"{call.name} is not run"
+    assert sum(m.sudo_runs for m in machines) == 6  # one sudo per confirmed click
+    assert not [a for a in asked if a.startswith(("sudo -n true", "doas", "su "))]  # doas and su are never run
 
 
 @pytest.mark.skipif(os.environ.get("LIMINAL_VENDOR_PAGES") != "1", reason="reaches the makers' pages: LIMINAL_VENDOR_PAGES=1")

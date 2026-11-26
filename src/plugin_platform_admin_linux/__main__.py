@@ -1,13 +1,19 @@
 """`python -m plugin_platform_admin_linux status | setup [STEP ...] | services | startups | boot | processes
 | service NAME start|stop|restart | startup APP run|end|enable|disable | startup APP start|stop --boot
-| register APP [--boot [--port N]] | unregister APP [--boot --accept-removal] | run [--elevated] -- COMMAND`: the plugin
-from the command line, in its own process. The platform app asks the same hooks from its page, its changes only from
-there (PAGE_ONLY_HOOKS, 0.8.1), but for run(), which no route of the platform's asks since liminal-platform 0.34.1.
+| register APP [--boot [--port N]] | unregister APP [--boot --accept-removal] | run [--elevated] -- COMMAND
+| accounts [--json]`: the plugin from the command line, in its own process. The platform app asks the same hooks
+from its page, its changes only from there (PAGE_ONLY_HOOKS, 0.8.1), but for run(), which no route of the platform's asks since liminal-platform 0.34.1.
 `--boot`: the app's boot service (a system unit liminal-platform-boot.service, or an OpenRC service) rather than its
 user unit at logon; a boot service's removal is asked twice, so it needs --accept-removal. `run` runs the command as
 you, and as root (through the library's `sudo -n --`, liminal-libs 1.80.0, unless you are root) only with `--elevated`
 as its first word, before the command's `--` (0.8.1): every word after `--` is the command's own, an `--elevated` among
-them."""
+them.
+
+`accounts` (0.9.0) shows Liminal's user and group as the page's table does: the group liminal, Liminal's own user,
+each member and whether the running platform has it, a change stopped part way, and the one root command for this
+system; `--json` gives the library's facts as the page reads them (linux_facts). It changes nothing: a change of
+Liminal's user and group is asked only from the page (the user's answer 6), or made by that one root command,
+`sudo <python> -I -B -m liminal_libs.linuxsys apply`, run once in a terminal."""
 from __future__ import annotations
 
 import json
@@ -19,7 +25,31 @@ from . import MACHINE
 
 USAGE = ("python -m plugin_platform_admin_linux status | setup [STEP ...] | services | startups | boot | processes "
          "| service NAME start|stop|restart | startup APP run|end|enable|disable | startup APP start|stop --boot "
-         "| register APP [--boot [--port N]] | unregister APP [--boot --accept-removal] | run [--elevated] -- COMMAND")
+         "| register APP [--boot [--port N]] | unregister APP [--boot --accept-removal] | run [--elevated] -- COMMAND "
+         "| accounts [--json]\n"
+         "Liminal's user and group are changed on the platform's page, or as root by one command run in a terminal: "
+         "sudo <python> -I -B -m liminal_libs.linuxsys apply (`accounts` names it for this system)")
+
+
+def _cell(cell) -> str:
+    """A cell of the page's table as a line's words: its text, then what it says beneath, in brackets."""
+    if isinstance(cell, dict):
+        if "form" in cell:
+            return ""  # a button of the page's: changes are asked there only
+        text, sub = str(cell.get("text", "")), str(cell.get("sub", ""))
+        return f"{text} ({sub})" if text and sub else text or sub
+    return str(cell or "")
+
+
+def accounts_text(machine) -> str:
+    """Liminal's user and group as the page's table says them, one line a row, the table's note last."""
+    tables, _, _, _ = machine.linux_sections()
+    table = next(t for t in tables if t["title"] == "Liminal's user and group")
+    lines = []
+    for row in table["rows"]:
+        what, here = _cell(row[0]), _cell(row[1])
+        lines.append(f"{what}: {here}" if here else what)
+    return "\n".join([*lines, "", table.get("note", "")]).rstrip() + "\n"
 
 
 def _flags(rest: list[str]) -> tuple[list[str], bool, int | None, bool]:
@@ -55,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
             items = (MACHINE.services() if what == "services" else MACHINE.startups() if what == "startups"
                      else MACHINE.boot_startups(MACHINE.boot_apps()))
             print(json.dumps([i.describe() for i in items], indent=1))
+            return 0
+        if what == "accounts" and rest in ([], ["--json"]):
+            facts = MACHINE.linux_facts(fresh=True)
+            if not facts.get("applies"):
+                print(facts.get("why", "not for this machine"), file=sys.stderr)
+                return 1
+            print(json.dumps(facts, indent=1) if rest else accounts_text(MACHINE).rstrip("\n"))
             return 0
         if what == "processes":
             print(json.dumps(MACHINE.processes(), indent=1))

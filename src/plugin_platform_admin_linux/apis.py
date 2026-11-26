@@ -3,11 +3,17 @@ should reflect the the API its attached to, and present links that provide docum
 of what the API is about"): systemd's systemctl and its unit files, OpenRC, the SysV service command, sudo (how root's
 rights are had) and procps' ps, each as its makers' pages describe it. Every address was read on 2026-11-11
 (`VERIFIED`). `facts` says what the plugin kept of them while it ran (asking nothing): whether sudo ran without a
-password, when last asked."""
+password, when last asked.
+
+0.9.0 (Liminal's user and group): the sudo card says sudo's conversation and its listing, and two cards come
+from the library's linuxsys.plan.TOOLS, every program its probe and root scripts run: the account tools
+(shadow, BusyBox, systemd-sysusers) and the system's tools. `facts` now says whether root is had without a
+password as the library read it (sudo's listing, at most once in 5 min)."""
 from __future__ import annotations
 
 import time
 
+from liminal_libs.linuxsys.plan import TOOLS
 from liminal_libs.sources.apis import Api, Area, Call, Link
 
 VERIFIED = "2026-11-11"
@@ -223,43 +229,72 @@ SERVICE = Api(
 
 SUDO_API = Api(
     name="sudo",
-    maker="the sudo project",
+    maker="the sudo project (classic sudo); the Trifecta Tech Foundation (sudo-rs, Ubuntu's sudo since 25.10)",
     about=("sudo runs a command as another user, root by default, as the sudoers policy allows. The plugin has root's "
-           "rights through it when the platform is not root, always with -n: when sudo would ask for a password the "
-           "command fails at once instead, and the page says a change needs root."),
+           "rights through it when the platform is not root. The services' and boot services' changes run with -n: "
+           "where sudo would ask for a password the command fails at once, and the page says a change needs root. A "
+           "change of Liminal's user and group (0.9.0) runs its one script through sudo's conversation: sudo's own "
+           "prompt, then the password typed on the page's form on its standard input, once, never kept. How root is "
+           "had is read from `sudo -V` and the listing `sudo -n -l`, at most once in 5 min (each read may write a line "
+           "in the system's log)."),
     kind="command",
-    base="sudo -n <command>",
-    version="sudo 1.9 (its -n, --non-interactive)",
-    auth=("the platform's user, as /etc/sudoers allows: a change runs only where sudo needs no password (NOPASSWD), and "
-          "a password is never asked"),
-    limits="",
+    base=("sudo -S -k -u root -p <prompt> -- /bin/sh -c <script> (Liminal's user and group); sudo -n <command> (the "
+          "services, the boot services)"),
+    version="sudo 1.9 (its -n, -S, -k, -p and -l); sudo-rs 0.2 (Ubuntu 25.10 and later), with its own words",
+    auth=("the platform's user, as /etc/sudoers allows: Liminal's user and group with the user's own password (root's "
+          "under openSUSE's targetpw), typed on the form, or none where the listing says no password is asked; the "
+          "services' and boot services' changes only where sudo needs no password (NOPASSWD), never asking one"),
+    limits="one try per click: a wrong password counts as a failed sign-in",
     costs="",
     links=(
         Link("sudo(8)", SUDO + "sudo.man/", "reference"),
         Link("sudoers(5)", SUDO + "sudoers.man/", "reference"),
+        Link("sudo.conf(5)", SUDO + "sudo.conf.man/", "reference"),
         Link("sudo", "https://www.sudo.ws/", "docs"),
         Link("sudo's changes", "https://www.sudo.ws/releases/changelog/", "changelog"),
         Link("sudo's source", "https://github.com/sudo-project/sudo", "source"),
+        Link("sudo-rs", "https://github.com/trifectatechfoundation/sudo-rs", "source"),
+        Link("OpenDoas", "https://github.com/Duncaen/OpenDoas", "source"),
     ),
     areas=(
         Area("Running as root", "a command run as root, refused at once where a password would be asked", SUDO + "sudo.man/",
-             covered="each change, and the reads that need root, through sudo -n"),
+             covered="the services' and boot services' changes, and the reads that need root, through sudo -n"),
+        Area("The password on standard input", "-S reads it from standard input, after the prompt -p names; -k asks "
+             "it again whatever the time stamp", SUDO + "sudo.man/",
+             covered=("a change of Liminal's user and group: the password written once, after sudo's own prompt (a "
+                      "marker of the change's own), never in an argument or the environment")),
         Area("The policy", "who may run what as whom, with a password or without (sudoers)", SUDO + "sudoers.man/",
-             covered="the plugin's rights come from it: no password, or no change"),
-        Area("Asking what is allowed", "the commands the user may run (sudo -l)", SUDO + "sudo.man/"),
+             covered="the plugin's rights come from it: a password typed on the form, none, or no change"),
+        Area("Asking what is allowed", "the commands the user may run (sudo -l)", SUDO + "sudo.man/",
+             covered=("the listing, read with -n at most once in 5 min: whether a change asks for a password here, the "
+                      "last matching rule deciding")),
+        Area("The log", "each command sudo runs, written to the system's log", SUDO + "sudoers.man/",
+             covered="the page says that sudo writes each change's script into this system's log"),
         Area("The time stamp", "a password asked once, then remembered for a while (sudo -v, -k)", SUDO + "sudo.man/"),
+        Area("doas and su", "root through OpenDoas, or su with root's password: each asks only in a terminal",
+             "https://github.com/Duncaen/OpenDoas",
+             covered="found and named: the page shows the one root command to run in a terminal (the user's answer 7)"),
     ),
     calls=(
-        Call("sudo -n true", "whether sudo runs without a password", "Running as root",
-             used="the rights the page says (asked again after 10 s)", docs=SUDO + "sudo.man/"),
+        Call("sudo -V", "sudo's version, and whether it is sudo or sudo-rs", "Running as root",
+             used="the probe (how root is had)", docs=SUDO + "sudo.man/"),
+        Call("env LC_ALL=C sudo -n -l", "what the user may run, without asking a password", "Asking what is allowed",
+             used="whether a change asks for a password here (at most once in 5 min)", docs=SUDO + "sudo.man/"),
+        Call("env LC_ALL=C sudo -S -k -u root -p <prompt> -- /bin/sh -c <script> liminal <nonce>",
+             "a shell script as root, the password on standard input after sudo's own prompt", "The password on standard input",
+             used="Make them..., Add or Remove a member..., Remove them... (Liminal's user and group)",
+             docs=SUDO + "sudo.man/", writes=True),
         Call("sudo -n <command>", "a command as root, never asking a password", "Running as root",
-             used="each change; the reads that need root", docs=SUDO + "sudo.man/", writes=True),
+             used="the services' and boot services' changes; the reads that need root", docs=SUDO + "sudo.man/", writes=True),
         Call("sudo -n sh -c <script>", "a shell script as root", "Running as root",
              used="a boot service's unit or script written whole, or removed", docs=SUDO + "sudo.man/", writes=True),
-        Call("sudo -l", "what the user may run", "Asking what is allowed", docs=SUDO + "sudo.man/"),
         Call("sudo -v", "the time stamp renewed (asks a password)", "The time stamp", docs=SUDO + "sudo.man/"),
+        Call("doas <command>", "a command as root through OpenDoas (a password only in a terminal)", "doas and su",
+             docs="https://github.com/Duncaen/OpenDoas", writes=True),
+        Call("su -c <command>", "a command as root, root's password typed in a terminal", "doas and su",
+             docs=MAN7 + "man1/su.1.html", writes=True),
     ),
-    verified=VERIFIED,
+    verified="2026-11-17",
 )
 
 PS = Api(
@@ -292,15 +327,150 @@ PS = Api(
     verified=VERIFIED,
 )
 
-APIS = (SYSTEMCTL, OPENRC_API, SERVICE, SUDO_API, PS)
+# -- Liminal's user and group (0.9.0): the account tools and the system's tools, derived from linuxsys.plan.TOOLS -------
+# The library names every program its probe and its root scripts run, with its maker and what it is run for
+# (liminal_libs.linuxsys.plan.TOOLS); the two cards below take their calls from it, so a program the library adds is on
+# a card or a test says it is not. Each call's page is the program's manual page.
+ACCOUNT_TOOLS = ("groupadd", "useradd", "usermod", "gpasswd", "userdel", "groupdel", "addgroup", "adduser", "deluser",
+                 "delgroup", "systemd-sysusers")
+ELEVATION_TOOLS = ("sudo", "doas", "su", "env")  # on the sudo card
+SYSUSERS = SYSTEMD + "systemd-sysusers.html"
+BUSYBOX = "https://busybox.net/downloads/BusyBox.html"
+PAGES = {  # a program's manual page
+    "groupadd": MAN7 + "man8/groupadd.8.html", "useradd": MAN7 + "man8/useradd.8.html",
+    "usermod": MAN7 + "man8/usermod.8.html", "gpasswd": MAN7 + "man1/gpasswd.1.html",
+    "userdel": MAN7 + "man8/userdel.8.html", "groupdel": MAN7 + "man8/groupdel.8.html",
+    "addgroup": BUSYBOX, "adduser": BUSYBOX, "deluser": BUSYBOX, "delgroup": BUSYBOX,
+    "systemd-sysusers": SYSUSERS, "sh": MAN7 + "man1/sh.1p.html", "awk": MAN7 + "man1/gawk.1.html",
+    "flock": MAN7 + "man1/flock.1.html", "getent": MAN7 + "man1/getent.1.html", "sed": MAN7 + "man1/sed.1.html",
+    "rpm": MAN7 + "man8/rpm.8.html", "restorecon": MAN7 + "man8/restorecon.8.html",
+}
+WRITES = {"groupadd", "useradd", "usermod", "gpasswd", "userdel", "groupdel", "addgroup", "adduser", "deluser",
+          "delgroup", "systemd-sysusers", "install", "mkdir", "mv", "rm", "rmdir", "sync", "chmod", "chgrp", "restorecon"}
+ACCOUNT_AREA = {"groupadd": "shadow", "useradd": "shadow", "usermod": "shadow", "gpasswd": "shadow",
+                "userdel": "shadow", "groupdel": "shadow", "addgroup": "BusyBox", "adduser": "BusyBox",
+                "deluser": "BusyBox", "delgroup": "BusyBox", "systemd-sysusers": "systemd-sysusers"}
+
+
+def _tool_calls(names, area_of) -> tuple[Call, ...]:
+    """The calls of `names`, as linuxsys.plan.TOOLS says each: its maker, what it is run for, its page."""
+    known = {name: (maker, used) for name, maker, used in TOOLS}
+    return tuple(Call(name, f"{name} ({known[name][0]})", area_of(name), used=known[name][1],
+                      docs=PAGES.get(name, MAN7 + f"man1/{name}.1.html"), writes=name in WRITES)
+                 for name in names if name in known)
+
+
+ACCOUNTS_API = Api(
+    name="Linux accounts (shadow, BusyBox, systemd-sysusers)",
+    maker="the shadow project (shadow-maint); the BusyBox project; the systemd project",
+    about=("The tools that make, change and remove a Linux system's groups and users: shadow's groupadd, useradd, "
+           "usermod, gpasswd, userdel and groupdel (most distributions), BusyBox's addgroup, adduser, deluser and "
+           "delgroup (Alpine), and systemd-sysusers, which makes them from a file in /etc/sysusers.d (Debian and Ubuntu: "
+           "the user's answer 5). The plugin makes Liminal's own system group liminal with the platform's user in it, "
+           "and Liminal's own system user liminal; adds and removes the group's members; and takes back what its "
+           "journal says Liminal made. Each change is one root script, run once through sudo's conversation (or as "
+           "root, or by the one root command), confirmed with its plan's sha256. On NixOS accounts are declared, so the "
+           "page shows the lines for its configuration instead."),
+    kind="command",
+    base="/bin/sh -c <script> as root: the tool of this system, chosen by the library (liminal_libs.linuxsys.accounts)",
+    version="shadow 4.13 and later; BusyBox 1.37 (Alpine 3.24); systemd-sysusers of systemd 255 and later",
+    auth="root, had through sudo (the password typed on the form), as root, or by the one root command in a terminal",
+    limits="the group and the user are named liminal always (the user's answer 8); a system group and user only",
+    costs="",
+    links=(
+        Link("groupadd(8)", PAGES["groupadd"], "reference"),
+        Link("useradd(8)", PAGES["useradd"], "reference"),
+        Link("usermod(8)", PAGES["usermod"], "reference"),
+        Link("gpasswd(1)", PAGES["gpasswd"], "reference"),
+        Link("userdel(8)", PAGES["userdel"], "reference"),
+        Link("groupdel(8)", PAGES["groupdel"], "reference"),
+        Link("login.defs(5)", MAN7 + "man5/login.defs.5.html", "reference"),
+        Link("sysusers.d(5)", SYSTEMD + "sysusers.d.html", "reference"),
+        Link("systemd-sysusers(8)", SYSUSERS, "reference"),
+        Link("BusyBox's commands", BUSYBOX, "docs"),
+        Link("shadow's source", "https://github.com/shadow-maint/shadow", "source"),
+    ),
+    areas=(
+        Area("shadow", "groupadd, useradd, usermod, gpasswd, userdel, groupdel: /etc/group, /etc/passwd and their "
+             "shadows, with the ranges login.defs gives", PAGES["groupadd"],
+             covered=("the group made with --system, the user with --system, no expiry and no login shell; a member "
+                      "added and removed with gpasswd; userdel and groupdel take back only what the journal says "
+                      "Liminal made")),
+        Area("BusyBox", "addgroup, adduser, deluser, delgroup (Alpine)", BUSYBOX,
+             covered="the same on Alpine: the group and the user as system ones, a member added and removed"),
+        Area("systemd-sysusers", "groups and users made from /etc/sysusers.d at boot or when asked, never removed",
+             SYSUSERS, covered="Debian and Ubuntu: /etc/sysusers.d/liminal.conf written, then systemd-sysusers run on it"),
+        Area("NixOS", "accounts declared in the system's configuration (users.groups, users.users)",
+             "https://nixos.org/manual/nixos/stable/",
+             covered="the page shows the lines to declare: nothing is made by a tool there"),
+        Area("Passwords and ageing", "passwd, chage: a user's password and its expiry", MAN7 + "man1/passwd.1.html"),
+        Area("Subordinate ids", "/etc/subuid and /etc/subgid for user namespaces (usermod --add-subuids)",
+             PAGES["usermod"]),
+    ),
+    calls=_tool_calls(ACCOUNT_TOOLS, lambda name: ACCOUNT_AREA[name]),
+    verified="2026-11-24",
+)
+
+SYSTEM_TOOLS = Api(
+    name="The system's tools (the probe and the root script)",
+    maker="the system's own: coreutils (GNU or uutils) or BusyBox, util-linux, glibc or musl, RPM, policycoreutils",
+    about=("What the library's probe and root scripts run besides the account tools: the POSIX shell, the core "
+           "utilities, flock for the lock, getent for an account through NSS, `rpm -q` where whose password openSUSE's "
+           "sudo asks depends on a package, restorecon where SELinux enforces. The probe runs once as the platform's "
+           "user and changes nothing; a root script writes the journal /var/lib/liminal-linux/MADE (a line before each "
+           "step and one after it), takes the lock, checks its guards, then runs its steps. A script uses only the "
+           "options GNU's, uutils' and BusyBox's tools all have."),
+    kind="command",
+    base="/bin/sh -c <probe> as the platform's user; /bin/sh -c <script> as root",
+    version="POSIX sh; coreutils 9 (GNU), uutils 0.2 (Ubuntu 26.04) or BusyBox 1.37; util-linux 2.39 and later",
+    auth="the probe: the platform's user; a script: root",
+    limits="a script is 96 KiB at most",
+    costs="",
+    links=(
+        Link("The Linux man-pages project", MAN7, "docs"),
+        Link("GNU coreutils' manual", "https://www.gnu.org/software/coreutils/manual/", "reference"),
+        Link("flock(1)", PAGES["flock"], "reference"),
+        Link("getent(1)", PAGES["getent"], "reference"),
+        Link("BusyBox's commands", BUSYBOX, "reference"),
+        Link("util-linux's source", "https://github.com/util-linux/util-linux", "source"),
+    ),
+    areas=(
+        Area("The shell", "POSIX sh: dash, bash or BusyBox's ash", PAGES["sh"],
+             covered="runs the probe and every root script"),
+        Area("Files and folders", "install, mkdir, mv, rm, rmdir, stat, sync, sha256sum, chmod, chgrp, cat, ls",
+             "https://www.gnu.org/software/coreutils/manual/",
+             covered=("the journal's folder and file, the sysusers file, each written beside its place and moved in; "
+                      "what Liminal wrote, removed")),
+        Area("Text", "cut, sort, tr, sed, awk, date", "https://www.gnu.org/software/coreutils/manual/",
+             covered="a field of /etc/group and /etc/passwd, a group's members in one order, the journal's run line"),
+        Area("Who and where", "id, uname, getent", PAGES["getent"],
+             covered="who the platform runs as, its groups, the machine, an account through NSS"),
+        Area("The lock", "flock(1): a lock held on a file for a command's time", PAGES["flock"],
+             covered="one change at a time on this system (a folder of its own where flock is missing)"),
+        Area("Packages and labels", "rpm -q, restorecon", PAGES["rpm"],
+             covered="whose password openSUSE's sudo asks; the SELinux label of what Liminal wrote"),
+        Area("Everything else", "the rest of the core utilities and util-linux", MAN7),
+    ),
+    calls=_tool_calls([t[0] for t in TOOLS if t[0] not in ACCOUNT_TOOLS + ELEVATION_TOOLS],
+                      lambda name: next((a for a, names in (
+                          ("The shell", ("sh",)),
+                          ("Text", ("cut", "sort", "tr", "sed", "awk", "date")),
+                          ("Who and where", ("id", "uname", "getent")),
+                          ("The lock", ("flock",)),
+                          ("Packages and labels", ("rpm", "restorecon"))) if name in names), "Files and folders")),
+    verified="2026-11-17",
+)
+
+APIS = (SYSTEMCTL, OPENRC_API, SERVICE, SUDO_API, PS, ACCOUNTS_API, SYSTEM_TOOLS)
 
 
 def facts(plugin) -> dict[str, dict[str, str]]:
-    """What the plugin kept of its APIs while it ran (asking nothing): sudo's answer when last asked."""
-    kept = getattr(plugin, "_sudo", None)  # (when, ok): sudo -n true, asked again after SUDO_S
+    """What the plugin kept of its APIs while it ran (asking nothing): whether root was had without a password when it
+    last read how root is had (sudo's listing, read by the library at most once in 5 min)."""
+    kept = getattr(plugin, "_sudo", None)  # (when, ok): may_elevate's last answer
     if not kept:
         return {}
     at, ok = kept
     seconds = max(0.0, time.monotonic() - at)
     ago = f"{seconds:.0f} s ago" if seconds < 90 else f"{seconds / 60:.0f} min ago"
-    return {SUDO_API.name: {"Without a password": ("yes" if ok else "no: it asks for one") + f" (asked {ago})"}}
+    return {SUDO_API.name: {"Without a password": ("yes" if ok else "no: it asks for one") + f" (read {ago})"}}

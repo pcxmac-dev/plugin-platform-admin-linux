@@ -20,8 +20,9 @@ from liminal_libs.machines.plugin import MachinePlugin
 
 from test_plugin import PLATFORM, SUDO, VENV, BootLinux, plugin
 
-CHANGES = ("service", "startup", "register", "unregister")
-READS = ("present", "status", "processes")
+CHANGES = ("service", "startup", "register", "unregister",
+           "linux_apply", "linux_member", "linux_undo")  # 0.9.0: Liminal's user and group, the user's answer 6
+READS = ("present", "status", "processes", "linux_facts")
 PROGRAM = "/tmp/x"  # a program another account could put there; nothing runs it here
 BOOT_UNIT = "/etc/systemd/system/liminal-platform-boot.service"
 
@@ -91,10 +92,15 @@ def test_another_plugin_or_no_one_asking_a_change_runs_nothing_and_its_page_does
                 lambda: neighbour.wants("startup", "integrator", "run"),
                 lambda: neighbour.wants("register", "platform", "boot", 8775),
                 lambda: neighbour.wants("startup", "platform", "start", "boot"),
-                lambda: neighbour.wants("unregister", "platform", "boot", True)):  # its second confirmation said
+                lambda: neighbour.wants("unregister", "platform", "boot", True),  # its second confirmation said
+                # 0.9.0: Liminal's user and group, each accept and a password given as the page would
+                lambda: neighbour.wants("linux_apply", "accounts service-user", "0" * 64, True, True, "words"),
+                lambda: neighbour.wants("linux_member", "alice", "add", "0" * 64, True, True, None),
+                lambda: app.on_its_own("linux_undo", "0" * 64, True, True, None)):
         with pytest.raises(asking.AskRefused, match="is asked only from its page"):
             ask()
     assert fake.calls == [] and fake.files == {} and list(home.iterdir()) == []  # nothing run, read or written
+    assert admin._linux.calls == [] and admin._linux.sudo_runs == 0  # not even the probe: no sudo started
     assert neighbour.wants("present") is True and neighbour.wants("processes")[0]["app"] == "charts"  # reads, as before
     assert app.from_page("service", "ufw", "stop") is None
     assert fake.calls[-1] == [*SUDO, "systemctl", "stop", "ufw"] and fake.started == ["systemctl stop ufw"]
