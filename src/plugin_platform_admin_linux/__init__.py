@@ -38,7 +38,7 @@ program another account put in /tmp ran at every logon, or at every boot from a 
 line calls the same code in its own process.
 
 Liminal's user and group (0.9.0; Monday list item 19, release one, the user, 2026-11-25: "Accounts and elevation"):
-the plugin is built on the library's Linux standard interface, machines.linuxadmin.LinuxAdmin (liminal-libs 1.101.0),
+the plugin is built on the library's Linux standard interface, machines.linuxadmin.LinuxAdmin (liminal-libs 1.102.0),
 and its page shows "How root is had" and "Liminal's user and group" first. There Make them... makes the system group
 `liminal` with the platform's user in it and Liminal's own system user `liminal`; Add a member... and Remove a
 member... change who is in the group; Remove them... takes back what the journal /var/lib/liminal-linux/MADE says

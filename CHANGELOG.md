@@ -1,10 +1,10 @@
 # Changelog
 
-## 0.9.0 (2026-11-26, provisional: it lands on the user's yes)
+## 0.9.0 (2026-11-26)
 
 Liminal's own user and group on Linux, made, changed and removed from the plugin's page or by one root command (Monday
 list item 19, part one, release one; the user, 2026-11-25: "Accounts and elevation"). The plugin is now built on the
-library's Linux standard interface, `liminal_libs.machines.linuxadmin.LinuxAdmin` (liminal-libs 1.101.0, provisional),
+library's Linux standard interface, `liminal_libs.machines.linuxadmin.LinuxAdmin` (liminal-libs 1.102.0),
 which holds what the plain package `liminal_libs.linuxsys` knows of this Linux: its facts, how root is had, the
 account tool, and the journal of what Liminal made.
 
@@ -41,7 +41,7 @@ account tool, and the journal of what Liminal made.
   root script)". `api_facts` says whether root was had without a password when last read.
 - **The command line.** `accounts` shows Liminal's user and group as the page's table does, and `accounts --json` the
   facts as the page reads them (`linux_facts`). Neither changes anything: the usage names the one root command.
-- `pyproject.toml`: liminal-libs>=1.101.0 (was 1.80.0), the release with `machines.linuxadmin` and `linuxsys`.
+- `pyproject.toml`: liminal-libs>=1.102.0 (was 1.80.0), the release with `machines.linuxadmin` and `linuxsys`.
 - Nothing runs as Liminal's user yet (the user's answer 10), no capability is given it (answer 9), and no grant,
   unit, package or folder of state is made: those are later releases'.
 - Tests: `tests/test_accounts.py` (new), on the library's recorded machines (`liminal_libs.linuxsys.standin`; no

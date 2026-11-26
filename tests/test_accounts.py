@@ -262,10 +262,10 @@ def test_the_command_line_shows_them_and_names_the_root_command_for_changes(monk
 
 
 def test_it_needs_the_library_release_with_the_linux_standard_interface():
-    """0.9.0 is built on liminal-libs 1.101.0 (provisional: its number is given at landing): machines.linuxadmin and
+    """0.9.0 is built on liminal-libs 1.102.0: machines.linuxadmin and
     the plain package linuxsys. The package says so, and so do its version's three places."""
     text = (Path(__file__).parent.parent / "pyproject.toml").read_text(encoding="utf-8")
     floor = re.search(r'"liminal-libs>=(\d+)\.(\d+)\.(\d+)"', text)
-    assert floor and tuple(int(n) for n in floor.groups()) >= (1, 101, 0)
-    assert tuple(int(n) for n in liminal_libs.__version__.split(".")[:3]) >= (1, 101, 0)
+    assert floor and tuple(int(n) for n in floor.groups()) >= (1, 102, 0)
+    assert tuple(int(n) for n in liminal_libs.__version__.split(".")[:3]) >= (1, 102, 0)
     assert re.search(r'^version = "([^"]+)"', text, re.M).group(1) == plugin_platform_admin_linux.__version__ == "0.9.0"
